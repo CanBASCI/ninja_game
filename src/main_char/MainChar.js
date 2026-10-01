@@ -3193,9 +3193,9 @@ export function createMainChar(world) {
     get isParrying() {
       return forcedAnim === ANIM.parry && performance.now() < busyUntil;
     },
-    /** İpte (çıkış / asılı / iniş) — ayak yere basınca false */
+    /** Dikey ip (3) — ayak yere basınca false. Salıncak (4) aggro’yu kesmez. */
     get isRopeAirborne() {
-      return ropeState !== "ground" || !!swingState;
+      return ropeState !== "ground";
     },
     /**
      * Soft sep yok: üzerinden atla, slide, vault/roll ile geç.
