@@ -726,15 +726,17 @@ export function createMainChar(world) {
           if (t < 0.5) {
             const u = t / 0.5;
             const fromX = vaultHandTargetX - vf * 0.55;
-            const toX = nearFace + vf * 0.35;
+            const toX = nearFace + vf * 0.2;
             const assistX = fromX + (toX - fromX) * u;
             if (vf > 0) x = Math.max(x, assistX);
             else x = Math.min(x, assistX);
           }
+          // Engeli geç — kısa clear (uzun fırlatma yok)
           if (t >= 0.48) {
-            const u = Math.min(1, (t - 0.48) / 0.45);
-            if (vf > 0) x = Math.max(x, nearFace + (farClear - nearFace) * u);
-            else x = Math.min(x, nearFace + (farClear - nearFace) * u);
+            const rollClear = b.x + vf * (b.halfT + CHAR_RADIUS + 0.08);
+            const u = Math.min(1, (t - 0.48) / 0.35);
+            if (vf > 0) x = Math.max(x, nearFace + (rollClear - nearFace) * u);
+            else x = Math.min(x, nearFace + (rollClear - nearFace) * u);
           }
           continue;
         }
@@ -1015,7 +1017,7 @@ export function createMainChar(world) {
         forcedAnim === ANIM.vault
           ? 1.65
           : forcedAnim === ANIM.roll
-            ? 1.75
+            ? 1.12
             : 1;
       const moveFace =
         forcedAnim === ANIM.vault || forcedAnim === ANIM.roll
@@ -2593,7 +2595,9 @@ export function createMainChar(world) {
       const moveFace =
         forcedAnim === ANIM.slide ? facing : vaultFacing;
       const moved = (character.position.x - prevX) * moveFace;
-      const want = vaultMomentum * dt;
+      // Roll: koşu momentumu çok uzağa taşıyordu — pad kısık
+      const momScale = forcedAnim === ANIM.roll ? 0.55 : 1;
+      const want = vaultMomentum * momScale * dt;
       if (forcedAnim === ANIM.slide) {
         // Slide: kılıçlı/kılıçsız koşu hızı (vaultMomentum) — root motion ezmesin
         character.position.x = prevX + facing * want;

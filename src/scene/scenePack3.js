@@ -481,6 +481,13 @@ export function buildScenePack3(root, opts = {}) {
     { x: 42, y: 2.3, z: -11.4, map: 2, op: 0.68, ry: 0.04, order: 1.55, w: 55, h: 9, drift: 0.34, phase: 3.0 },
     { x: -22, y: 2.2, z: -11.8, map: 0, op: 0.62, ry: 0.03, order: 1.55, w: 52, h: 8.5, drift: 0.35, phase: 0.8 },
     { x: 16, y: 2.3, z: -12.2, map: 1, op: 0.65, ry: -0.03, order: 1.55, w: 54, h: 8.6, drift: 0.33, phase: 2.6 },
+    // Mid→far kenarı — zemine yakın yoğun peçe
+    { x: -14, y: 0.85, z: -12.6, map: 0, op: 0.55, ry: 0.02, order: 1.5, w: 56, h: 5.2, drift: 0.32, phase: 0.5 },
+    { x: 4, y: 0.75, z: -13.0, map: 2, op: 0.58, ry: -0.03, order: 1.5, w: 58, h: 5.4, drift: 0.3, phase: 1.2 },
+    { x: 22, y: 0.7, z: -13.4, map: 1, op: 0.56, ry: 0.04, order: 1.5, w: 56, h: 5.1, drift: 0.28, phase: 2.1 },
+    { x: 40, y: 0.65, z: -13.8, map: 0, op: 0.52, ry: -0.02, order: 1.5, w: 54, h: 4.9, drift: 0.27, phase: 2.9 },
+    { x: -6, y: 0.55, z: -14.2, map: 1, op: 0.48, ry: 0.03, order: 1.48, w: 60, h: 4.4, drift: 0.26, phase: 0.9 },
+    { x: 28, y: 0.5, z: -14.5, map: 2, op: 0.46, ry: -0.04, order: 1.48, w: 58, h: 4.2, drift: 0.25, phase: 2.4 },
     // Mid içi — root’un altında kalsın
     { x: -16, y: 2.0, z: -8.6, map: 1, op: 0.36, ry: 0.02, order: 1.65, w: 48, h: 7.2, drift: 0.42, phase: 0.2 },
     { x: -2, y: 2.1, z: -8.9, map: 0, op: 0.34, ry: -0.03, order: 1.65, w: 46, h: 7, drift: 0.4, phase: 1.4 },

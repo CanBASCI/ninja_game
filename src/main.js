@@ -21,10 +21,30 @@ const statusEl = document.getElementById("status");
 const animEl = document.getElementById("anim");
 const helpEl = document.getElementById("help");
 const hudTitleEl = document.querySelector("#hud h1");
+const fpsHudEl = document.getElementById("fpsHud");
 const menuToggleBtn = document.getElementById("menuToggle");
 const editorToggleBtn = document.getElementById("editorToggle");
 const clearPlacementsBtn = document.getElementById("clearPlacementsBtn");
 const assetEditorPanel = document.getElementById("assetEditorPanel");
+
+let fpsFrames = 0;
+let fpsLast = performance.now();
+let fpsSmooth = 60;
+
+function updateFpsHud() {
+  if (!fpsHudEl) return;
+  fpsFrames += 1;
+  const now = performance.now();
+  const elapsed = now - fpsLast;
+  if (elapsed < 250) return;
+  const instant = (fpsFrames * 1000) / elapsed;
+  fpsSmooth = fpsSmooth * 0.65 + instant * 0.35;
+  const shown = Math.round(fpsSmooth);
+  fpsHudEl.textContent = `${shown} fps`;
+  fpsHudEl.classList.toggle("fps-low", shown < 30);
+  fpsFrames = 0;
+  fpsLast = now;
+}
 
 function syncMenuToggle() {
   const open = !document.body.classList.contains("menus-hidden");
@@ -461,6 +481,7 @@ function animate() {
     updateMs: t2 - t1,
     renderMs: t3 - t2,
   });
+  updateFpsHud();
 }
 
 setStatus("Sahne yükleniyor…");
