@@ -46,7 +46,17 @@ export const ASSET_CATALOG = [
   { path: "foliage/Tall_Meadow_Grass.glb", group: "foliage", label: "Tall Grass" },
   { path: "foliage/Ancient_Remnants_1001153728_texture.glb", group: "foliage", label: "Ancient Remnants" },
   { path: "foliage/Generate_individual_g_1001090218_texture.glb", group: "foliage", label: "Grass Clump" },
-  { path: "asset_2d/buildings/moonlit_temple.png", group: "buildings", label: "Moonlit Temple" },
+  { path: "asset_2d/buildings/moonlit_temple.png", group: "buildings", label: "Moonlit Temple (2D)" },
+  {
+    path: "scene_3/buildings/pink/cyber_japan_buildings_1001231821_texture.glb",
+    group: "buildings",
+    label: "Cyber Japan Pink",
+  },
+  {
+    path: "scene_3/buildings/pink/cyber_japan_building__1001233346_texture.glb",
+    group: "buildings",
+    label: "Cyber Japan Pink B",
+  },
   { path: "buildings/low_poly_ancient_chin_1001153652_texture.glb", group: "buildings", label: "Low Poly Chinese" },
   { path: "zones/tori_gate.glb", group: "zones", label: "Torii Gate" },
   { path: "trees/sakura.glb", group: "trees", label: "Sakura Pack" },
@@ -380,9 +390,10 @@ export function createAssetEditor(opts) {
       data.id = makeId(spec.path);
     }
 
-    const url = data.path.startsWith("asset_2d/")
-      ? `${PUBLIC}/${data.path}`
-      : `${BASE}/${data.path}`;
+    const url =
+      data.path.startsWith("asset_2d/") || data.path.startsWith("scene_3/")
+        ? `${PUBLIC}/${data.path}`
+        : `${BASE}/${data.path}`;
 
     let object;
     if (/\.png$/i.test(data.path)) {
@@ -672,21 +683,50 @@ export function createAssetEditor(opts) {
           const badTree = isTree && sy < 12;
           if (!badTree) existing.data.scale = [...p.scale];
         }
-        // Pack3 2B builtin düzeltmeleri — LS bozuk y/ölçek/mid ezmesin
+        // Pack3 builtin — 2B mesh merkez Y (zemin Y değil); LS ezmesin
         const PACK3_FIX = {
-          s3_grass_0: { position: [-2, -0.04, -5.2], scale: [2.05, 3.25, 1] },
-          s3_grass_1: { position: [18, -0.04, -5.8], scale: [2.15, 3.4, 1] },
-          s3_grass_2: { position: [-18.37, -0.042, 2.779], scale: [2.35, 2.9, 1] },
-          s3_grass_2b: { position: [-17.52, -0.042, 2.42], scale: [1.95, 2.4, 1] },
-          s3_grass_2c: { position: [-19.18, -0.042, 3.08], scale: [1.68, 2.12, 1] },
-          s3_grass_2d: { position: [-17.95, -0.042, 3.32], scale: [2.12, 2.62, 1] },
-          s3_grass_2e: { position: [-19.05, -0.042, 2.18], scale: [1.48, 1.88, 1] },
-          s3_grass_2f: { position: [-18.7, -0.042, 2.95], scale: [1.82, 2.28, 1] },
-          s3_bamboo_0: { position: [10.5, -0.04, -6.5], scale: [3.2, 7.2, 1] },
-          s3_bamboo_1: { position: [-23.325, -0.03, -5.4], scale: [3.6, 6.4, 1] },
-          s3_temple: { position: [-3.529, -0.419, -7.06], scale: [20.774, 21.169, 1] },
+          s3_grass_0: { position: [-2.417, 1.585, -5.2], scale: [2.05, 3.25, 1] },
+          s3_grass_1: { position: [18, 1.66, -5.8], scale: [2.15, 3.4, 1] },
+          s3_grass_2: { position: [-18.37, 1.408, 2.779], scale: [2.35, 2.9, 1] },
+          s3_grass_2b: { position: [-17.52, 1.158, 2.42], scale: [1.95, 2.4, 1] },
+          s3_grass_2c: { position: [-19.18, 1.018, 3.08], scale: [1.68, 2.12, 1] },
+          s3_grass_2d: { position: [-17.95, 1.268, 3.32], scale: [2.12, 2.62, 1] },
+          s3_grass_2e: { position: [-19.05, 0.898, 2.18], scale: [1.48, 1.88, 1] },
+          s3_grass_2f: { position: [-18.7, 1.098, 2.95], scale: [1.82, 2.28, 1] },
+          s3_bamboo_0: { position: [10.5, 3.56, -6.5], scale: [3.2, 7.2, 1] },
+          s3_bamboo_1: { position: [-23.325, 3.17, -5.4], scale: [3.6, 6.4, 1] },
+          s3_sakura_0: {
+            position: [-10.904, 9.211, -2.198],
+            scale: [29.839, 18.722, 1],
+          },
+          s3_sakura_1: {
+            position: [2.5, 9.05, -2.75],
+            scale: [29.552, 18.542, 1],
+          },
+          s3_sakura_2: {
+            position: [14.616, 8.934, -3.9],
+            scale: [29.181, 18.309, 1],
+          },
+          s3_sakura_3: {
+            position: [26.603, 9.09, -3.5],
+            scale: [29.678, 18.621, 1],
+          },
+          s3_temple: {
+            position: [-4.109, 10.833, -6.366],
+            scale: [-7.66, 10.737, 15.728],
+            rotation: [1.013, -89.835, 0.943],
+          },
+          s3_temple_l: {
+            position: [-35.181, 7.379, -6.366],
+            scale: [-3.545, 7.971, 6.636],
+            rotation: [0.009, -71.814, -0.061],
+          },
+          s3_fence: {
+            position: [1.6, 0.589, 0.203],
+            scale: [2.944, 1.101, 2.735],
+            rotation: [0, 90, 0],
+          },
           s3_arch: {
-            // Kanonik boy/rotate/scale/y-z; X lane yerleşimi serbest
             lockX: false,
             position: [23.399, 1.257, 0.333],
             scale: [2.898, 3.726, 2.989],
@@ -727,38 +767,10 @@ export function createAssetEditor(opts) {
             scale: [0.82, 1.55, 0.82],
             rotation: [0, 88.558, 0],
           },
-          // Sakura: sadece zemin Y (−0.221) + scale; X/Z yerleri serbest
-          s3_sakura_0: {
-            lockYOnly: true,
-            position: [0, -0.221, 0],
-            scale: [29.839, 18.722, 1],
-          },
-          s3_sakura_1: {
-            lockYOnly: true,
-            position: [0, -0.221, 0],
-            scale: [29.552, 18.542, 1],
-          },
-          s3_sakura_2: {
-            lockYOnly: true,
-            position: [0, -0.221, 0],
-            scale: [29.181, 18.309, 1],
-          },
-          s3_sakura_3: {
-            lockYOnly: true,
-            position: [0, -0.221, 0],
-            scale: [29.678, 18.621, 1],
-          },
         };
         const p3fix = PACK3_FIX[existing.data.id];
         if (p3fix) {
-          if (p3fix.lockYOnly && existing.data.position?.length >= 3) {
-            // Sadece zemin Y + scale — X/Z sahne/editör serbest
-            existing.data.position = [
-              existing.data.position[0],
-              p3fix.position[1],
-              existing.data.position[2],
-            ];
-          } else if (p3fix.lockX === false && existing.data.position?.length >= 3) {
+          if (p3fix.lockX === false && existing.data.position?.length >= 3) {
             // Lane X serbest — y/z (ve verilen scale/rot) kilitle
             existing.data.position = [
               existing.data.position[0],
@@ -769,11 +781,11 @@ export function createAssetEditor(opts) {
             existing.data.position = [...p3fix.position];
           }
           existing.data.scale = [...p3fix.scale];
-          existing.data.parent = "root";
+          existing.data.parent = p3fix.parent || existing.data.parent || "root";
           existing.data.rotation = p3fix.rotation
             ? [...p3fix.rotation]
             : [0, 0, 0];
-          setLayer(existing, "root", { nudgeZ: false });
+          setLayer(existing, existing.data.parent, { nudgeZ: false });
         }
         applyTransform(existing.object, existing.data);
         existing.object.userData?.syncShadowBlob?.();

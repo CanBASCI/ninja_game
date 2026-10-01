@@ -1,18 +1,20 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { addRopeAnchor } from "./ropeAnchors.js";
-import { bakeBillboard, placeBillboard, billboardFromMap } from "./billboardBake.js";
+import { bakeBillboard } from "./billboardBake.js";
 
 const LAYER_ENV = 0;
 const LAYER_CHAR = 1;
 
 const BASE = "./public/scene2";
-const ASSET_2D = "./public/asset_2d";
-const TEMPLE_2D = `${ASSET_2D}/buildings/moonlit_temple`;
-const TEMPLE_2D_META = {
-  worldW: 14.796621180718667,
-  worldH: 14.067144726514815,
-};
+const BUILDING_PINK =
+  "./public/scene_3/buildings/pink/cyber_japan_buildings_1001231821_texture.glb";
+const BUILDING_PINK_PATH =
+  "scene_3/buildings/pink/cyber_japan_buildings_1001231821_texture.glb";
+const BUILDING_PINK_B =
+  "./public/scene_3/buildings/pink/cyber_japan_building__1001233346_texture.glb";
+const BUILDING_PINK_B_PATH =
+  "scene_3/buildings/pink/cyber_japan_building__1001233346_texture.glb";
 
 /**
  * Scene 3 — Scene 2 layout’unun 2B dekor versiyonu.
@@ -53,7 +55,7 @@ export function buildScenePack3(root, opts = {}) {
     });
   }
 
-  let staticLeft = 10;
+  let staticLeft = 12;
   function markStaticReady() {
     staticLeft -= 1;
     if (staticLeft <= 0) onStaticReady?.();
@@ -515,20 +517,18 @@ export function buildScenePack3(root, opts = {}) {
   const sakuraPlacements = [
     {
       id: "s3_sakura_0",
-      position: [-10.904, -0.221, -3.373],
+      position: [-10.904, -0.15, -2.198],
       rotation: [0, 0, 0],
       scale: [29.839, 18.722, 1],
-      // pack SakuraA — soğuk pembe
       kind: "pack",
       packIndex: 0,
       tint: 0xe4ecff,
     },
     {
       id: "s3_sakura_1",
-      position: [2.5, -0.221, -3.6],
+      position: [2.5, -0.221, -2.75],
       rotation: [0, 0, 0],
-      scale: sakuraScaleAt(-3.6),
-      // mor yapraklı ayrı GLB
+      scale: [29.552, 18.542, 1],
       kind: "purple",
       tint: 0xffffff,
     },
@@ -536,7 +536,7 @@ export function buildScenePack3(root, opts = {}) {
       id: "s3_sakura_2",
       position: [14.616, -0.221, -3.9],
       rotation: [0, 0, 0],
-      scale: sakuraScaleAt(-3.9),
+      scale: [29.181, 18.309, 1],
       kind: "pack",
       packIndex: 1,
       tint: 0xffe6d8,
@@ -545,7 +545,7 @@ export function buildScenePack3(root, opts = {}) {
       id: "s3_sakura_3",
       position: [26.603, -0.221, -3.5],
       rotation: [0, 0, 0],
-      scale: sakuraScaleAt(-3.5),
+      scale: [29.678, 18.621, 1],
       kind: "purple",
       tint: 0xffe8f4,
     },
@@ -672,7 +672,7 @@ export function buildScenePack3(root, opts = {}) {
           id: "s3_sakura_m0",
           bake: purpleBake,
           path: "trees/sakura_tree_1001152836.glb",
-          x: -16.5,
+          x: -19.161,
           y: -0.2,
           z: -9.0,
           scale: [14.5, 9.2, 1],
@@ -819,7 +819,7 @@ export function buildScenePack3(root, opts = {}) {
   loadStaticGlb(`${BASE}/props/auto_jump/Rustic_Wooden_Fence.glb`, (src) => {
     const model = src.clone(true);
     prepareEnvMesh(model);
-    model.position.set(1.6, 0.589, 0);
+    model.position.set(1.6, 0.589, 0.203);
     model.rotation.set(0, THREE.MathUtils.degToRad(90), 0);
     model.scale.set(2.944, 1.101, 2.735);
     root.add(model);
@@ -904,7 +904,7 @@ export function buildScenePack3(root, opts = {}) {
       });
       if (!bake) return;
       const rocks = [
-        { id: "s3_mid_rock_0", x: -18.5, y: -0.04, z: -9.2, scale: [2.8, 2.1, 1] },
+        { id: "s3_mid_rock_0", x: -26.358, y: -0.04, z: -9.2, scale: [2.8, 2.1, 1] },
         { id: "s3_mid_rock_1", x: 2.6, y: -0.04, z: -8.3, scale: [2.2, 1.7, 1] },
         { id: "s3_mid_rock_2", x: 12.4, y: -0.04, z: -9.7, scale: [2.5, 1.9, 1] },
         { id: "s3_mid_rock_3", x: 36.0, y: -0.04, z: -8.8, scale: [2.6, 2.0, 1] },
@@ -1023,12 +1023,11 @@ export function buildScenePack3(root, opts = {}) {
           scale: [3.6, 6.4, 1],
           yaw: 0,
         },
-        // Mid — boş gövdeyi doldur (parallax mid grubu)
         {
           id: "s3_bamboo_m0",
           parent: mid,
           parentLayer: "mid",
-          position: [-14, -0.05, -8.8],
+          position: [-18.41, -0.05, -3.946],
           scale: [2.4, 5.6, 1],
           yaw: 18,
         },
@@ -1036,7 +1035,7 @@ export function buildScenePack3(root, opts = {}) {
           id: "s3_bamboo_m1",
           parent: mid,
           parentLayer: "mid",
-          position: [-4.5, -0.05, -9.4],
+          position: [-3, -0.05, -9.4],
           scale: [2.1, 5.1, 1],
           yaw: -12,
         },
@@ -1124,17 +1123,15 @@ export function buildScenePack3(root, opts = {}) {
   // s3_grass_2 kümesi: kullanıcı pozisyonu; max scale [2.35, 2.9] — diğerleri daha küçük + farklı bake yaw
   loadStaticGlb(`${BASE}/foliage/Tall_Meadow_Grass.glb`, async (src) => {
     const spots = [
-      { id: "s3_grass_0", parent: root, parentLayer: "root", position: [-2, -0.04, -5.2], scale: [2.05, 3.25, 1], yaw: 0, tint: 0x9aa8b8 },
+      { id: "s3_grass_0", parent: root, parentLayer: "root", position: [-2.417, -0.04, -5.2], scale: [2.05, 3.25, 1], yaw: 0, tint: 0x9aa8b8 },
       { id: "s3_grass_1", parent: root, parentLayer: "root", position: [18, -0.04, -5.8], scale: [2.15, 3.4, 1], yaw: 32, tint: 0x8f9eae },
-      // Ana ot (en büyük) + etrafında daha küçük / farklı açı
       { id: "s3_grass_2", parent: root, parentLayer: "root", position: [-18.37, -0.042, 2.779], scale: [2.35, 2.9, 1], yaw: 0, tint: 0xa3b0be },
       { id: "s3_grass_2b", parent: root, parentLayer: "root", position: [-17.52, -0.042, 2.42], scale: [1.95, 2.4, 1], yaw: 32, tint: 0x96a4b4 },
       { id: "s3_grass_2c", parent: root, parentLayer: "root", position: [-19.18, -0.042, 3.08], scale: [1.68, 2.12, 1], yaw: -28, tint: 0x8f9eae },
       { id: "s3_grass_2d", parent: root, parentLayer: "root", position: [-17.95, -0.042, 3.32], scale: [2.12, 2.62, 1], yaw: 32, tint: 0xa8b4c2 },
       { id: "s3_grass_2e", parent: root, parentLayer: "root", position: [-19.05, -0.042, 2.18], scale: [1.48, 1.88, 1], yaw: -28, tint: 0x9aa8b8 },
       { id: "s3_grass_2f", parent: root, parentLayer: "root", position: [-18.7, -0.042, 2.95], scale: [1.82, 2.28, 1], yaw: -28, tint: 0x92a0b0 },
-      // Mid ot — boşluğu doldur
-      { id: "s3_grass_m0", parent: mid, parentLayer: "mid", position: [-9.5, -0.05, -8.5], scale: [1.7, 2.4, 1], yaw: 0, tint: 0x7e8a96 },
+      { id: "s3_grass_m0", parent: mid, parentLayer: "mid", position: [-18.056, -0.05, -2.13], scale: [1.7, 2.4, 1], yaw: 0, tint: 0x7e8a96 },
       { id: "s3_grass_m1", parent: mid, parentLayer: "mid", position: [0.8, -0.05, -9.3], scale: [1.55, 2.2, 1], yaw: 32, tint: 0x74808c },
       { id: "s3_grass_m2", parent: mid, parentLayer: "mid", position: [11.2, -0.05, -8.7], scale: [1.8, 2.5, 1], yaw: -28, tint: 0x82909c },
       { id: "s3_grass_m3", parent: mid, parentLayer: "mid", position: [21.5, -0.05, -9.5], scale: [1.6, 2.25, 1], yaw: 32, tint: 0x788490 },
@@ -1197,38 +1194,47 @@ export function buildScenePack3(root, opts = {}) {
     }
   });
 
-  // --- Temple 2B (prebaked PNG, root) — editör absolute scale/pos ---
-  {
-    const map = loader.load(`${TEMPLE_2D}.png`);
-    map.colorSpace = THREE.SRGBColorSpace;
-    map.anisotropy = Math.min(8, 8);
-    const bake = billboardFromMap(map, {
-      ...TEMPLE_2D_META,
-      fog: false,
-      alphaTest: 0.08,
-    });
-    spawnGrounded(
-      bake,
-      root,
-      {
-        id: "s3_temple",
-        path: "asset_2d/buildings/moonlit_temple.png",
-        group: "buildings",
-        role: "decor",
-        parentLayer: "root",
-        fixedFacing: true,
-        x: -3.529,
-        y: -0.419,
-        z: -7.06,
-        scale: [20.774, 21.169, 1],
-        absoluteScale: true,
-        tint: 0xfff0f6,
-        fog: false,
-        renderOrder: 2.5,
-      },
-      0,
+  // --- Temple 3D (pink cyber japan) — editör kanonik pose ---
+  loadStaticGlb(BUILDING_PINK, (src) => {
+    const model = src.clone(true);
+    prepareEnvMesh(model);
+    model.position.set(-4.109, 10.833, -6.366);
+    model.rotation.set(
+      THREE.MathUtils.degToRad(1.013),
+      THREE.MathUtils.degToRad(-89.835),
+      THREE.MathUtils.degToRad(0.943),
     );
-  }
+    model.scale.set(-7.66, 10.737, 15.728);
+    root.add(model);
+    registerEditable(model, {
+      id: "s3_temple",
+      path: BUILDING_PINK_PATH,
+      group: "buildings",
+      role: "decor",
+      parent: "root",
+    });
+  });
+
+  // --- İkinci pink bina — solda, root ---
+  loadStaticGlb(BUILDING_PINK_B, (src) => {
+    const model = src.clone(true);
+    prepareEnvMesh(model);
+    model.position.set(-35.181, 7.379, -6.366);
+    model.rotation.set(
+      THREE.MathUtils.degToRad(0.009),
+      THREE.MathUtils.degToRad(-71.814),
+      THREE.MathUtils.degToRad(-0.061),
+    );
+    model.scale.set(-3.545, 7.971, 6.636);
+    root.add(model);
+    registerEditable(model, {
+      id: "s3_temple_l",
+      path: BUILDING_PINK_B_PATH,
+      group: "buildings",
+      role: "decor",
+      parent: "root",
+    });
+  });
 
   function update(camX = 0) {
     far.position.x = camX * (1 - farFactor);
