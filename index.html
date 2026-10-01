@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ninja Animation Test</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body class="menus-hidden">
+    <button type="button" id="menuToggle" aria-label="Menüleri aç/kapat" title="Menüler">
+      <span class="menu-toggle-icon" aria-hidden="true">☰</span>
+    </button>
+    <div id="leftColumn">
+      <div id="scenePanel">
+        <h2>Sahne</h2>
+        <p class="hint">Ortam · kontrol</p>
+        <div id="sceneControls"></div>
+      </div>
+      <div id="hud">
+        <h1>Ninja Test</h1>
+        <p id="status">Yükleniyor…</p>
+        <p id="anim">Animasyon: —</p>
+        <div id="help">
+          <div><b>Hareket</b> · <kbd>A</kbd>/<kbd>D</kbd> ←/→ yürü · <kbd>Shift</kbd> koş · <kbd>Ctrl</kbd> sprint · <kbd>↓</kbd>/<kbd>S</kbd> eğil · ←/→ ile eğilerek yürü · kılıç eldeyken savaş yürü · <kbd>G</kbd> taşı</div>
+          <div><b>Zıpla / parkour</b> · <kbd>↑</kbd>/<kbd>W</kbd> zıpla (havada tekrar = çift zıpla) · koşarken <kbd>↓</kbd> slide · koşarak engel → otomatik vault/roll · <kbd>Space</kbd>/<kbd>R</kbd> elle vault</div>
+          <div><b>Saldırı</b> · <kbd>J</kbd> kılıç · <kbd>K</kbd> ok · <kbd>L</kbd> çift bıçak spin · <kbd>E</kbd> rastgele J/L · <kbd>X</kbd> kılıç çek / kına</div>
+          <div><b>Özel</b> · <kbd>1</kbd> yüz · suda otomatik yüz · <kbd>3</kbd> ip (çık → bekle → tekrar 3 in) · engellerden sonra su</div>
+        </div>
+      </div>
+    </div>
+    <div id="enemyHpWrap" hidden>
+      <div id="enemyHpLabel">enemy_with_knife</div>
+      <div id="enemyHpTrack">
+        <div id="enemyHpFill"></div>
+      </div>
+    </div>
+    <div id="playerHpWrap" hidden>
+      <div id="playerHpLabel">main</div>
+      <div id="playerHpTrack">
+        <div id="playerHpFill"></div>
+      </div>
+    </div>
+    <div id="damageFlash" aria-hidden="true"></div>
+    <div id="rightPanels">
+      <div id="lookPanel">
+        <h2>Karakter görünüm</h2>
+        <p class="hint">Sadece ninja · sahne değişmez</p>
+        <div id="lookControls"></div>
+        <button type="button" id="lookCopy">Değerleri kopyala</button>
+      </div>
+      <div id="sheathPanel">
+        <h2>Katana kılıf (boş)</h2>
+        <p class="hint">Kılıç eldeyken · konum / eğim</p>
+        <div id="sheathControls"></div>
+        <button type="button" id="sheathCopy">Değerleri kopyala</button>
+      </div>
+      <div id="sheathFullPanel">
+        <h2>Kılıf + katana</h2>
+        <p class="hint">Kılıç kınındayken · enine / boyut</p>
+        <div id="sheathFullControls"></div>
+        <button type="button" id="sheathFullCopy">Değerleri kopyala</button>
+      </div>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
