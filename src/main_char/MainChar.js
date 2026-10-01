@@ -32,6 +32,16 @@ import { createRunDustFx } from "../fx/runDust.js";
 import { createDoubleJumpDustFx } from "../fx/doubleJumpDust.js";
 import { sceneSettings } from "../scene/sceneMenu.js";
 import { getViewCam, facingYaw } from "../scene/viewMode.js";
+import { findRopeLatch } from "../scene/ropeAnchors.js";
+import {
+  dynamicShadowCast,
+  wantsDynamicKeyShadow,
+  applyCasterPolicy,
+  applyDynamicCharEnv,
+  applyShadowFrustum,
+  anchorLightToShadowVolume,
+  getAllowDynamicShadows,
+} from "../scene/shadowPolicy.js";
 
 /**
  * Ana oyuncu karakteri.
@@ -68,8 +78,8 @@ export function createMainChar(world) {
   let sheathFullProp = null;
   let sheathFullTwist = null;
   let sheathFullBaseScale = 1;
-  /** true = kılıç elde + boş kılıf */
-  let katanaDrawn = true;
+  /** true = kılıç elde + boş kılıf · default: kınında */
+  let katanaDrawn = false;
 
   const swordTrail = createSwordTrail(scene);
   const limbTrailL = createSwordTrail(scene);
@@ -133,6 +143,8 @@ export function createMainChar(world) {
   let vaultMomentum = 0;
   /** Otomatik vault — aynı engelde tekrar tetiklenmesin */
   let lastAutoVaultBarrier = null;
+  /** Limbo altındayken tuş bırakılsa da engel bitene kadar eğilmeye devam */
+  let limboCrouchHold = false;
   /** ground → up → hang → down → land → ground */
   let ropeState = "ground";
   /** Asılıyken sabit lift — her kare yeniden ölçülmesin (titreme) */
@@ -440,45 +452,85 @@ export function createMainChar(world) {
     );
   }
 
-  /** Sabit kamerada görünür alanın tepesine yakın asılma yüksekliği */
-  function getRopeHangY() {
-    const camY = 2.1;
-    const lookY = 1.1;
+  /** Aktif latch yüksekliği — yoksa ekran tepesi */
+  let activeRopeLatchY = null;
+
+  /** Eski sabit asılma: görünür alanın üst bandı */
+  function getScreenHangY() {
+    const camY = lookSimple.camY ?? 2.75;
+    const lookY = lookSimple.lookY ?? 1.75;
     const camZ = lookSimple.zoom;
     const dist = Math.hypot(camZ, camY - lookY);
     const halfH = dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5);
-    // Ekranın üst %85'i — tepede ama kırpılmadan
     return lookY + halfH * 0.85;
   }
 
-  // Karakter ışıkları
-  const charHemi = new THREE.HemisphereLight(0xddeeff, 0x445566, 1.15);
+  function getRopeHangY() {
+    if (activeRopeLatchY != null && Number.isFinite(activeRopeLatchY)) {
+      return activeRopeLatchY;
+    }
+    return getScreenHangY();
+  }
+
+  // Karakter ışıkları — ay key + kamera fill (sadece LAYER_CHAR)
+  const charHemi = new THREE.HemisphereLight(0x9aa8c4, 0x1c1824, 0.7);
   charHemi.layers.set(layerChar);
   scene.add(charHemi);
 
-  const charSun = new THREE.DirectionalLight(0xfff2d6, 1.35);
-  charSun.position.set(6, 12, 4);
-  charSun.castShadow = true;
-  charSun.shadow.mapSize.set(1024, 1024);
-  charSun.shadow.bias = -0.0002;
+  const charSun = new THREE.DirectionalLight(0xdce8ff, 1.0);
+  charSun.castShadow = wantsDynamicKeyShadow();
+  applyShadowFrustum(charSun, { autoUpdate: true });
   charSun.layers.set(layerChar);
   scene.add(charSun);
   scene.add(charSun.target);
 
-  const charFill = new THREE.DirectionalLight(0xb0c4e0, 0);
-  charFill.position.set(-4, 3, 8);
+  const charFill = new THREE.DirectionalLight(0xc5d0e8, 0.95);
   charFill.layers.set(layerChar);
   scene.add(charFill);
+  scene.add(charFill.target);
 
-  const charRim = new THREE.DirectionalLight(0xffe0b8, 0);
-  charRim.position.set(-2, 4, -6);
+  const charRim = new THREE.DirectionalLight(0xb8c8e8, 0.4);
   charRim.layers.set(layerChar);
   scene.add(charRim);
+  scene.add(charRim.target);
 
   const charKey = new THREE.PointLight(0xfff2dd, 0, 16, 1.6);
   charKey.position.set(0, 2.4, 3.5);
   charKey.layers.set(layerChar);
   scene.add(charKey);
+
+  const bootOff = envSun?.userData?.lightOffset || { x: -4, y: 12.2, z: -22 };
+  if (envSun?.color) charSun.color.copy(envSun.color);
+
+  function syncCharLightsFromMoon() {
+    const off = envSun?.userData?.lightOffset || bootOff;
+    anchorLightToShadowVolume(charSun, off);
+    if (envSun) charSun.color.copy(envSun.color);
+    // Bake bitince dinamik gölge açılsın
+    charSun.castShadow = wantsDynamicKeyShadow();
+
+    // Fill: kameradan (+Z) → bakan yüz aydınlanır (ağaç/ENV etkilenmez)
+    const a = { x: 12, y: 0, z: 0 };
+    charFill.position.set(a.x, a.y + 3.5, a.z + 24);
+    charFill.target.position.set(a.x, a.y + 1.0, a.z);
+    charFill.target.updateMatrixWorld();
+    charFill.updateMatrixWorld();
+
+    // Rim: ay tarafı hafif kenar
+    charRim.position.set(a.x + off.x * 0.45, a.y + off.y * 0.55, a.z + off.z * 0.45);
+    charRim.target.position.set(a.x, a.y + 1.0, a.z);
+    charRim.target.updateMatrixWorld();
+    charRim.updateMatrixWorld();
+  }
+  syncCharLightsFromMoon();
+
+  let appliedCharEnv = null;
+  function syncCharEnvMap() {
+    const env = scene.userData.charEnvMap || null;
+    if (env === appliedCharEnv) return;
+    appliedCharEnv = env;
+    look.applyLookSettings();
+  }
 
   const look = createLookController({
     getMaterials: () => characterMaterials,
@@ -490,6 +542,7 @@ export function createMainChar(world) {
       rim: charRim,
       key: charKey,
     }),
+    getCharEnvMap: () => scene.userData.charEnvMap || null,
   });
   look.buildLookPanel();
 
@@ -515,7 +568,7 @@ export function createMainChar(world) {
   }
 
   function isInWaterZone() {
-    if (!waterZone || !character) return false;
+    if (!waterZone || waterZone.enabled === false || !character) return false;
     const x = character.position.x;
     const z = character.position.z;
     return (
@@ -710,27 +763,33 @@ export function createMainChar(world) {
         continue;
       }
 
-      if (!overlapping) continue;
-      if (vaulting) continue;
-
-      // Limbo: sadece çömelme / slide ile altından geç
+      // Limbo önce: ayaktayken görsel gövde payı + kemer kalınlığı
       if (b.passUnder) {
+        if (vaulting) continue;
         const ducking =
           forcedAnim === ANIM.slide ||
           currentAnimName === ANIM.crouchIdle ||
           currentAnimName === ANIM.crouchWalk ||
-          (keys.has("KeyS") ||
-            keys.has("KeyC") ||
-            keys.has("ArrowDown"));
+          limboCrouchHold ||
+          isCrouchKeyDown();
+        // Ayakta: mesh omuzları CHAR_RADIUS’dan taşar — ekstra pay
+        const bodyR =
+          ducking && grounded ? CHAR_RADIUS : CHAR_RADIUS + 0.24;
+        const L = b.x - b.halfT - bodyR;
+        const R = b.x + b.halfT + bodyR;
+        if (!(x > L && x < R)) continue;
         // Ayaktayken / zıplarken kirişe çarp; eğilince serbest
         if (ducking && grounded) continue;
         // Üstünden atladıysa geç
         if (y >= b.height - 0.12) continue;
-        const mid = (left + right) / 2;
-        if (prevX <= mid) x = left;
-        else x = right;
+        const mid = (L + R) / 2;
+        if (prevX <= mid) x = L;
+        else x = R;
         continue;
       }
+
+      if (!overlapping) continue;
+      if (vaulting) continue;
 
       // Engel üstünde duruyorsa yandan itme
       if (y >= b.height - 0.12) continue;
@@ -742,6 +801,57 @@ export function createMainChar(world) {
 
     character.position.x = x;
     character.position.y = Math.max(0, y);
+  }
+
+  /** Karakter gövdesi limbo (eğilerek geçilen) engelle X’te kesişiyor mu */
+  function isOverlappingLimbo(x = character?.position.x) {
+    if (!Number.isFinite(x)) return false;
+    for (const b of barriers) {
+      if (!b?.passUnder) continue;
+      const bodyR = CHAR_RADIUS + 0.24;
+      const left = b.x - b.halfT - bodyR;
+      const right = b.x + b.halfT + bodyR;
+      if (x > left && x < right) return true;
+    }
+    return false;
+  }
+
+  function isCrouchKeyDown() {
+    const shift = keys.has("ShiftLeft") || keys.has("ShiftRight");
+    const ctrl = keys.has("ControlLeft") || keys.has("ControlRight");
+    const running = shift || ctrl;
+    return (
+      keys.has("KeyC") ||
+      keys.has("KeyS") ||
+      (keys.has("ArrowDown") && !running)
+    );
+  }
+
+  /**
+   * Limbo içindeyken eğilmeye başlandıysa, engelden tamamen çıkana kadar
+   * tuş bırakılsa bile crouch devam eder (ayakta kalıp köşeden fırlamasın).
+   */
+  function refreshLimboCrouchHold() {
+    if (!character || ropeState !== "ground" || swingState) {
+      limboCrouchHold = false;
+      return;
+    }
+    if (!isOverlappingLimbo()) {
+      limboCrouchHold = false;
+      return;
+    }
+    const ducking =
+      isCrouchKeyDown() ||
+      limboCrouchHold ||
+      forcedAnim === ANIM.slide ||
+      currentAnimName === ANIM.crouchIdle ||
+      currentAnimName === ANIM.crouchWalk;
+    if (ducking) limboCrouchHold = true;
+  }
+
+  function wantsCrouch() {
+    refreshLimboCrouchHold();
+    return isCrouchKeyDown() || limboCrouchHold;
   }
 
   function findBarrierAhead(maxDist = VAULT_MAX_DIST) {
@@ -1042,6 +1152,17 @@ export function createMainChar(world) {
     return true;
   }
 
+  /** Kılıçlı hareket ölçeği (fight/walk) */
+  function getArmedMoveScale() {
+    return katanaDrawn ? FIGHT_MOVE_SCALE : 1;
+  }
+
+  /** Shift koşu / Ctrl sprint — kılıçlıysa aynı ölçekle */
+  function getRunMoveSpeed(sprint = false) {
+    const base = sprint ? MOVE_SPEED.sprint : MOVE_SPEED.run;
+    return base * getArmedMoveScale();
+  }
+
   function desiredLocomotion() {
     if (sceneSettings.control !== "main") {
       if (ropeState !== "ground") {
@@ -1066,11 +1187,8 @@ export function createMainChar(world) {
     const shift = keys.has("ShiftLeft") || keys.has("ShiftRight");
     const ctrl = keys.has("ControlLeft") || keys.has("ControlRight");
     const running = shift || ctrl;
-    // Aşağı ok koşarken slide — çömelme değil
-    const crouch =
-      keys.has("KeyC") ||
-      keys.has("KeyS") ||
-      (keys.has("ArrowDown") && !running);
+    // Aşağı ok koşarken slide — çömelme değil; limbo içinde tutuş devam eder
+    const crouch = wantsCrouch();
     const carry = keys.has("KeyG");
 
     if (keys.has("Digit1") || isInWaterZone()) {
@@ -1088,7 +1206,7 @@ export function createMainChar(world) {
 
     if (carry) return { anim: ANIM.carry, speed: MOVE_SPEED.carry };
     // Kılıçlı: walk’taki oran (fight/walk) run / sprint / crouch’a da
-    const armedScale = katanaDrawn ? FIGHT_MOVE_SCALE : 1;
+    const armedScale = getArmedMoveScale();
     if (crouch) {
       return {
         anim: ANIM.crouchWalk,
@@ -1098,13 +1216,13 @@ export function createMainChar(world) {
     if (ctrl) {
       return {
         anim: ANIM.sprint,
-        speed: MOVE_SPEED.sprint * armedScale,
+        speed: getRunMoveSpeed(true),
       };
     }
     if (shift) {
       return {
         anim: ANIM.run,
-        speed: MOVE_SPEED.run * armedScale,
+        speed: getRunMoveSpeed(false),
       };
     }
     // Kılıç elde → savaş yürüyüşü
@@ -1153,6 +1271,19 @@ export function createMainChar(world) {
         if (!isJumpAnim(forcedAnim) && grounded) return;
         busyUntil = 0;
       }
+
+      const handY =
+        (character?.position.y ?? 0) +
+        (groundOffset?.position.y ?? 0) +
+        SWING_PIVOT_Y * 0.85;
+      const hangY = getScreenHangY();
+      const latch = findRopeLatch(character.position.x, handY, {
+        mode: "hang",
+        facing,
+        hangY,
+      });
+      if (!latch) return; // üstte örtü yok → boş gökyüzüne atma
+
       // Önce kınına — hang boyunca el/kılıç pozu değişmesin
       setKatanaDrawn(false);
       if (playOneShot(ANIM.hang)) {
@@ -1173,8 +1304,9 @@ export function createMainChar(world) {
           groundOffset.position.y = ropeUpFromLift;
           groundOffset.rotation.x = 0;
         }
-        // Kanca tavanda kilit — anim el/zoom oynatmasın
-        ropeHookAnchor.set(character.position.x, getRopeHangY(), 0);
+        activeRopeLatchY = hangY;
+        // Kanca ekran tepesinde, karakter X’te
+        ropeHookAnchor.set(latch.x, hangY, latch.z ?? 0);
         ropeHookAnchorSet = true;
       }
     } else if (ropeState === "up" || ropeState === "hang") {
@@ -1219,14 +1351,25 @@ export function createMainChar(world) {
 
   function beginSwing() {
     if (!character || ropeState !== "ground" || swingState) return false;
-    setKatanaDrawn(false);
 
     const dir = facing >= 0 ? 1 : -1;
-    const handY = character.position.y + SWING_PIVOT_Y;
+    const handY =
+      character.position.y +
+      (groundOffset?.position.y ?? 0) +
+      SWING_PIVOT_Y;
     const ox = character.position.x;
-    const ceilY = getRopeHangY();
-    const c45 = Math.SQRT1_2; // cos/sin 45°
+    const ceilY = getScreenHangY();
 
+    // Üstte örtü yoksa boş gökyüzüne atma
+    const latch = findRopeLatch(ox, handY, {
+      mode: "swing",
+      facing: dir,
+      hangY: ceilY,
+    });
+    if (!latch) return false;
+
+    // Eski salıncak: 45° ileri-yukarı kanca
+    const c45 = Math.SQRT1_2;
     let range = SWING_RANGE;
     let ax = ox + dir * range * c45;
     let ay = handY + range * c45;
@@ -1239,11 +1382,14 @@ export function createMainChar(world) {
       ay = ceilY;
     }
 
+    setKatanaDrawn(false);
+
     swingAnchor.set(ax, ay, 0);
     swingFlyFrom.set(ox, handY, 0);
     swingLength = range;
     swingFlyT = 0;
     swingState = "fly";
+    activeRopeLatchY = ay;
 
     // Koşu / zıplama hızından başlangıç salınımı
     const shift = keys.has("ShiftLeft") || keys.has("ShiftRight");
@@ -1285,6 +1431,7 @@ export function createMainChar(world) {
     canDoubleJump = true;
     ropeHookAnchorSet = false;
     ropeHookFx.setActive(false);
+    activeRopeLatchY = null;
 
     // 4 veya W: aynı backflip → crouch düşüş (W’de ekstra zıplama hızı yukarıda)
     if (actions[ANIM.swingRelease]) {
@@ -1888,6 +2035,7 @@ export function createMainChar(world) {
     airVelX = 0;
     ropeHookAnchorSet = false;
     ropeHookFx.setActive(false);
+    activeRopeLatchY = null;
     velocityY = 0;
     if (character) character.position.y = 0;
     if (groundOffset) {
@@ -1917,6 +2065,7 @@ export function createMainChar(world) {
     airVelX = 0;
     ropeHookAnchorSet = false;
     ropeHookFx.setActive(false);
+    activeRopeLatchY = null;
     if (character) character.position.y = 0;
     if (groundOffset) {
       groundOffset.position.y = 0;
@@ -1940,6 +2089,12 @@ export function createMainChar(world) {
     handleRopeKey();
     handleSwingKey();
     if (swingState) {
+      if (keys.has("ArrowDown") || keys.has("KeyS")) {
+        keys.delete("ArrowDown");
+        keys.delete("KeyS");
+        releaseSwing({ jump: false });
+        return;
+      }
       if (
         input.jumpQueued ||
         performance.now() < (input.jumpBufferUntil || 0)
@@ -2058,12 +2213,9 @@ export function createMainChar(world) {
           currentAnimName === ANIM.run || currentAnimName === ANIM.sprint;
         const running = shift || ctrl || runningAnim;
         if (moving && running && playOneShot(ANIM.slide)) {
-          // Koşu hızını koru (kılıçlı = fight ölçeği)
-          const armedScale = katanaDrawn ? FIGHT_MOVE_SCALE : 1;
-          if (ctrl) vaultMomentum = MOVE_SPEED.sprint * armedScale;
-          else if (shift || currentAnimName === ANIM.sprint)
-            vaultMomentum = MOVE_SPEED.sprint * armedScale;
-          else vaultMomentum = MOVE_SPEED.run * armedScale;
+          // Kılıçlı/kılıçsız koşu hızıyla birebir aynı
+          const sprinting = ctrl || currentAnimName === ANIM.sprint;
+          vaultMomentum = getRunMoveSpeed(sprinting);
           prevRootZ = null;
           vaultYScale = 1;
           vaultTargetBarrier = null;
@@ -2110,7 +2262,7 @@ export function createMainChar(world) {
     }
 
     if (Number.isFinite(minY)) {
-      let sole = 0.04;
+      let sole = 0.02;
       if (currentAnimName === ANIM.crouchIdle) sole = 0.03;
       if (currentAnimName === ANIM.crouchWalk) sole = 0;
       groundOffset.position.y = character.position.y - minY + sole;
@@ -2234,10 +2386,10 @@ export function createMainChar(world) {
       const targetCamX = character.position.x + sideOff;
       const targetLookX = character.position.x - lookOff;
       camera.position.x += (targetCamX - camera.position.x) * turnK;
-      camera.position.y = 2.1;
+      camera.position.y = lookSimple.camY ?? 2.75;
       camera.position.z = CAM_Z;
       camera.up.set(0, 1, 0);
-      camera.lookAt(targetLookX, 1.1, 0);
+      camera.lookAt(targetLookX, lookSimple.lookY ?? 1.75, 0);
       return;
     }
 
@@ -2259,10 +2411,10 @@ export function createMainChar(world) {
       const targetCamX = character.position.x + sideOff;
       const targetLookX = character.position.x - lookOff;
       camera.position.x += (targetCamX - camera.position.x) * turnK;
-      camera.position.y = 2.1;
+      camera.position.y = lookSimple.camY ?? 2.75;
       camera.position.z = CAM_Z;
       camera.up.set(0, 1, 0);
-      camera.lookAt(targetLookX, 1.1, 0);
+      camera.lookAt(targetLookX, lookSimple.lookY ?? 1.75, 0);
       return;
     }
 
@@ -2408,7 +2560,7 @@ export function createMainChar(world) {
       const moved = (character.position.x - prevX) * facing;
       const want = vaultMomentum * dt;
       if (forcedAnim === ANIM.slide) {
-        // Slide: tam koşu hızı — root motion fazla/az olmasın
+        // Slide: kılıçlı/kılıçsız koşu hızı (vaultMomentum) — root motion ezmesin
         character.position.x = prevX + facing * want;
       } else if (moved < want) {
         // Vault/roll: yavaşsa tamamla, hızlıysa bırak
@@ -2517,6 +2669,7 @@ export function createMainChar(world) {
         ropeLandT = 0;
         ropeHookAnchorSet = false;
         ropeHookFx.setActive(false);
+        activeRopeLatchY = null;
         play(desiredLocomotion().anim, { fade: 0.15 });
       }
     } else {
@@ -2569,19 +2722,17 @@ export function createMainChar(world) {
       const targetCamX = character.position.x + sideOff;
       const targetLookX = character.position.x - lookOff;
       camera.position.x += (targetCamX - camera.position.x) * turnK;
-      camera.position.y = 2.1;
+      camera.position.y = lookSimple.camY ?? 2.75;
       camera.position.z = CAM_Z;
       camera.up.set(0, 1, 0);
-      camera.lookAt(targetLookX, 1.1, 0);
+      camera.lookAt(targetLookX, lookSimple.lookY ?? 1.75, 0);
 
       charKey.position.set(character.position.x, 2.4, 3.5);
-      charSun.target.position.set(character.position.x, 0.8, 0);
-      charSun.target.updateMatrixWorld();
-      if (envSun) {
-        envSun.target.position.set(character.position.x, 0.8, 0);
-        envSun.target.updateMatrixWorld();
-      }
     }
+
+    // Key light her zaman ay yönünden (kontrol kimde olursa olsun)
+    syncCharLightsFromMoon();
+    syncCharEnvMap();
   }
 
   async function load() {
@@ -2594,7 +2745,10 @@ export function createMainChar(world) {
     baseCharacterColors = [];
     visual.traverse((obj) => {
       if (obj.isMesh) {
-        obj.castShadow = true;
+        obj.userData.dynamicShadowCaster = true;
+        obj.userData.dynamicShadowKind = "mainChar";
+        obj.castShadow =
+          getAllowDynamicShadows() && dynamicShadowCast.mainChar;
         obj.receiveShadow = true;
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         for (const mat of mats) {
@@ -2605,7 +2759,7 @@ export function createMainChar(world) {
         }
       }
     });
-    look.applyLookSettings();
+    applyCasterPolicy(visual, "mainChar");    look.applyLookSettings();
 
     const size = new THREE.Vector3();
     new THREE.Box3().setFromObject(visual).getSize(size);
@@ -2764,10 +2918,26 @@ export function createMainChar(world) {
       root.traverse((o) => {
         o.layers.set(layerChar);
         if (o.isMesh) {
-          o.castShadow = true;
+          o.userData.dynamicShadowCaster = true;
+          o.userData.dynamicShadowKind = "mainChar";
+          o.castShadow =
+            getAllowDynamicShadows() && dynamicShadowCast.mainChar;
           o.receiveShadow = true;
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const mat of mats) {
+            if (!mat) continue;
+            // Kılıç/kılıf da look + CHAR IBL alsın
+            if (mat.color) baseCharacterColors.push(mat.color.clone());
+            else baseCharacterColors.push(new THREE.Color(0x888888));
+            characterMaterials.push(mat);
+          }
         }
       });
+      applyDynamicCharEnv(
+        characterMaterials,
+        scene.userData.charEnvMap || null,
+        0.55,
+      );
       return root;
     }
 
@@ -2858,6 +3028,7 @@ export function createMainChar(world) {
         });
 
         setKatanaDrawn(katanaDrawn);
+        look.applyLookSettings();
         console.log("Katana kılıf →", hipsAttach.name);
       } catch (err) {
         console.warn("Katana kılıf yüklenemedi:", err);
@@ -3008,19 +3179,13 @@ export function createMainChar(world) {
     get isCrouching() {
       if (
         currentAnimName === ANIM.crouchIdle ||
-        currentAnimName === ANIM.crouchWalk
+        currentAnimName === ANIM.crouchWalk ||
+        limboCrouchHold
       ) {
         return true;
       }
       if (!grounded || ropeState !== "ground") return false;
-      const shift = keys.has("ShiftLeft") || keys.has("ShiftRight");
-      const ctrl = keys.has("ControlLeft") || keys.has("ControlRight");
-      const running = shift || ctrl;
-      return (
-        keys.has("KeyC") ||
-        keys.has("KeyS") ||
-        (keys.has("ArrowDown") && !running)
-      );
+      return isCrouchKeyDown();
     },
     /** Shift/Ctrl koşu veya run/sprint anim */
     get isRunning() {

@@ -15,6 +15,7 @@ import { createFuseSparkFx } from "../fx/fuseSpark.js";
 import { createExplosionFx } from "../fx/explosion.js";
 import { createRunDustFx } from "../fx/runDust.js";
 import { facingYaw } from "../scene/viewMode.js";
+import { dynamicShadowCast, applyCasterPolicy, applyDynamicCharEnv } from "../scene/shadowPolicy.js";
 
 const GRAVITY = 28;
 const JUMP_VY = 9.2;
@@ -70,6 +71,7 @@ export function createBomber({
   const fuseFx = createFuseSparkFx(scene);
   const boomFx = createExplosionFx(scene);
   const runDustFx = createRunDustFx(scene, { layer: layerChar });
+  let appliedCharEnv = null;
   const _boomPos = new THREE.Vector3();
   const _runFeet = new THREE.Vector3();
 
@@ -629,14 +631,18 @@ export function createBomber({
     visual.traverse((obj) => {
       obj.layers.set(layerChar);
       if (obj.isMesh) {
-        obj.castShadow = true;
+        obj.castShadow = dynamicShadowCast.bomber;
         obj.receiveShadow = true;
+        obj.userData.dynamicShadowCaster = true;
+        obj.userData.dynamicShadowKind = "bomber";
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         for (const mat of mats) {
           if (mat) bomberMaterials.push(mat);
         }
       }
     });
+    applyCasterPolicy(visual, "bomber");
+    applyDynamicCharEnv(bomberMaterials, scene.userData.charEnvMap || null, 0.55);
 
     const size = new THREE.Vector3();
     new THREE.Box3().setFromObject(visual).getSize(size);
@@ -879,6 +885,12 @@ export function createBomber({
     resolveBarrierCollision(prevX);
     syncFuse();
     updateRunDust(dt);
+
+    const env = scene.userData.charEnvMap || null;
+    if (env !== appliedCharEnv) {
+      appliedCharEnv = env;
+      applyDynamicCharEnv(bomberMaterials, env, 0.55);
+    }
   }
 
   function dispose() {

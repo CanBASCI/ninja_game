@@ -4,6 +4,7 @@ import {
   LAYER_CHAR,
   createInput,
   createSceneMenu,
+  createAssetEditor,
   sceneSettings,
 } from "./scene/index.js";
 import {
@@ -14,12 +15,16 @@ import { createEnemy, createBomber, ENEMY_DAMAGE, BOMBER_BLAST_RADIUS } from "./
 import { createHitSparkFx } from "./fx/hitSpark.js";
 import { createParryClashFx } from "./fx/parryClash.js";
 import { createSoftSeparationSystem } from "./combat/softSeparation.js";
+import { createPerfMonitor, logPackStats } from "./scene/perfLog.js";
 
 const statusEl = document.getElementById("status");
 const animEl = document.getElementById("anim");
 const helpEl = document.getElementById("help");
 const hudTitleEl = document.querySelector("#hud h1");
 const menuToggleBtn = document.getElementById("menuToggle");
+const editorToggleBtn = document.getElementById("editorToggle");
+const clearPlacementsBtn = document.getElementById("clearPlacementsBtn");
+const assetEditorPanel = document.getElementById("assetEditorPanel");
 
 function syncMenuToggle() {
   const open = !document.body.classList.contains("menus-hidden");
@@ -29,11 +34,50 @@ function syncMenuToggle() {
   }
 }
 
+function syncEditorToggle() {
+  const open = !document.body.classList.contains("editor-hidden");
+  if (editorToggleBtn) {
+    editorToggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    editorToggleBtn.title = open ? "Asset Editor kapat" : "Asset Editor aç";
+  }
+  if (assetEditorPanel) {
+    if (open) assetEditorPanel.removeAttribute("hidden");
+    else assetEditorPanel.setAttribute("hidden", "");
+  }
+}
+
 menuToggleBtn?.addEventListener("click", () => {
   document.body.classList.toggle("menus-hidden");
   syncMenuToggle();
 });
 syncMenuToggle();
+
+editorToggleBtn?.addEventListener("click", () => {
+  document.body.classList.toggle("editor-hidden");
+  const open = !document.body.classList.contains("editor-hidden");
+  syncEditorToggle();
+  if (!open) {
+    assetEditor?.setEnabled?.(false);
+  } else {
+    assetEditor?.setEnabled?.(true);
+    sceneMenu?.syncAssetEditorUi?.();
+  }
+});
+syncEditorToggle();
+
+clearPlacementsBtn?.addEventListener("click", () => {
+  const ok = window.confirm(
+    "Kayıtlı Scene2/Scene3 yerleşimlerini silip sayfayı yenile?\n(localStorage — builtin sahne kalır)",
+  );
+  if (!ok) return;
+  try {
+    localStorage.removeItem("ninja_scene2_placements");
+    localStorage.removeItem("ninja_scene3_placements");
+  } catch (err) {
+    console.warn("placements clear:", err);
+  }
+  location.reload();
+});
 
 const HELP_MAIN = `
   <div><b>Hareket</b> · <kbd>A</kbd>/<kbd>D</kbd> ←/→ yürü · <kbd>Shift</kbd> koş · <kbd>Ctrl</kbd> sprint · <kbd>↓</kbd>/<kbd>S</kbd> eğil · ←/→ ile eğilerek yürü · kılıç eldeyken savaş yürü · <kbd>G</kbd> taşı</div>
@@ -41,7 +85,7 @@ const HELP_MAIN = `
   <div><b>Kılıçlı</b> · <kbd>J</kbd> savurma · <kbd>K</kbd> thrust · <kbd>L</kbd> çift bıçak spin · <kbd>E</kbd> rastgele J/K/L · splash enemy’ye değince isabet</div>
   <div><b>Kılıçsız</b> · <kbd>X</kbd> kına · <kbd>J</kbd> yumruk · <kbd>K</kbd> flying kick · <kbd>L</kbd> tekmeler sırayla · <kbd>E</kbd> rastgele punch/kick</div>
   <div><b>Savunma</b> · <kbd>F</kbd> vuruş anında bas = perfect parry (~0.3sn pencere; basılı bekleyince olmaz) · <kbd>P</kbd> öl / kalk</div>
-  <div><b>Özel</b> · <kbd>1</kbd> yüz · suda otomatik yüz · <kbd>3</kbd> dikey ip (çık → bekle → tekrar 3 in) · <kbd>4</kbd> salıncak ipi (45° kanca · tekrar 4 bırak · W zıpla) · engellerden sonra su</div>
+  <div><b>Özel</b> · <kbd>1</kbd> yüz · suda otomatik yüz · <kbd>3</kbd> dikey ip (çık → bekle → tekrar 3 in) · <kbd>4</kbd> salıncak ipi (45° kanca · tekrar 4 / ↓ bırak · W zıpla) · engellerden sonra su</div>
 `;
 
 const HELP_ENEMY = `
@@ -83,11 +127,52 @@ const {
   barriers,
   limboBarrier,
   waterZone,
+  pack2Root,
+  pack2Api,
+  pack3Root,
+  pack3Api,
+  staticReady,
+  setWorldPack,
+  getWorldPack,
+  updateWorld,
+  bakeEnvShadows,
   onResize,
   render,
 } = createScene();
 
 let enemyRef = null;
+
+const assetEditor = createAssetEditor({
+  scene,
+  camera,
+  renderer,
+  pack2Root,
+  pack3Root,
+  barriers,
+  limboBarrier,
+  getLayers: () => {
+    const pack = sceneSettings.worldPack;
+    if (pack === "3") {
+      return (
+        pack3Api?.getLayers?.() || {
+          root: pack3Root,
+          mid: pack3Root,
+          far: pack3Root,
+        }
+      );
+    }
+    return (
+      pack2Api?.getLayers?.() || {
+        root: pack2Root,
+        mid: pack2Root,
+        far: pack2Root,
+      }
+    );
+  },
+  onChange: () => {
+    sceneMenu?.syncAssetEditorUi?.();
+  },
+});
 
 const sceneMenu = createSceneMenu({
   scene,
@@ -95,6 +180,16 @@ const sceneMenu = createSceneMenu({
   envHemi,
   envSun,
   limboBarrier,
+  setWorldPack,
+  bakeEnvShadows,
+  assetEditor,
+  onWorldPackChange: (pack) => {
+    const props =
+      pack === "3" ? pack3Api?.getEditableProps?.() || [] : null;
+    assetEditor.setActivePack?.(pack, props).then(() => {
+      sceneMenu?.syncAssetEditorUi?.();
+    });
+  },
   onControlChange: (control) => {
     applyControlHud(control);
   },
@@ -110,6 +205,26 @@ const sceneMenu = createSceneMenu({
   },
 });
 sceneMenu.buildScenePanel();
+sceneMenu.buildAssetEditorPanel();
+
+// Builtin sahne prop’larını editöre al + storage
+Promise.all([assetEditor.ready, staticReady])
+  .then(() => {
+    const pack = sceneSettings.worldPack === "3" ? "3" : "2";
+    const props =
+      pack === "3"
+        ? pack3Api?.getEditableProps?.() || []
+        : pack2Api?.getEditableProps?.() || [];
+    return assetEditor.bootstrap(props, pack);
+  })
+  .then(() => {
+    sceneMenu.syncAssetEditorUi?.();
+    console.log("%c[PERF] staticReady — pack karşılaştırması", "color:#8cf;font-weight:bold");
+    if (pack2Root) logPackStats("ScenePack2", pack2Root);
+    if (pack3Root) logPackStats("ScenePack3", pack3Root);
+    perf.dumpNow();
+  })
+  .catch((err) => console.warn("assetEditor bootstrap:", err));
 
 const mainChar = createMainChar({
   scene,
@@ -172,6 +287,13 @@ let parryKnockCooldown = 0;
 const hitSparkFx = createHitSparkFx(scene);
 const parryClashFx = createParryClashFx(scene);
 const softSep = createSoftSeparationSystem(scene, { layer: LAYER_CHAR });
+
+const perf = createPerfMonitor({
+  renderer,
+  scene,
+  getPack: () => getWorldPack?.() ?? sceneSettings.worldPack,
+  packRoots: { "1": null, "2": pack2Root, "3": pack3Root },
+});
 
 window.addEventListener("resize", onResize);
 
@@ -307,36 +429,51 @@ function tryParryKnockback(dt) {
 
 function animate() {
   requestAnimationFrame(animate);
+  const t0 = performance.now();
   const dt = Math.min(clock.getDelta(), 0.05);
   mainChar.updateMixer(dt);
   mainChar.update(dt);
-  enemy.updateMixer(dt);
-  enemy.update(dt);
-  bomber.updateMixer(dt);
-  bomber.update(dt);
-  softSep.update(dt, {
-    player: mainChar.character,
-    playerIgnores: !!mainChar.ignoresSoftSeparation,
-    playerRunning: !!mainChar.isRunning,
-    playerFacing: mainChar.facing ?? 1,
-    units: [enemy, bomber],
-  });
-  tryHitEnemy(dt);
-  tryHitBomber(dt);
-  tryHitPlayer(dt);
-  tryParryKnockback(dt);
+  if (!sceneSettings.enemiesPaused) {
+    enemy.updateMixer(dt);
+    enemy.update(dt);
+    bomber.updateMixer(dt);
+    bomber.update(dt);
+    softSep.update(dt, {
+      player: mainChar.character,
+      playerIgnores: !!mainChar.ignoresSoftSeparation,
+      playerRunning: !!mainChar.isRunning,
+      playerFacing: mainChar.facing ?? 1,
+      units: [enemy, bomber],
+    });
+    tryHitEnemy(dt);
+    tryHitBomber(dt);
+    tryHitPlayer(dt);
+    tryParryKnockback(dt);
+  }
   hitSparkFx.update(dt);
   parryClashFx.update(dt);
+  const t1 = performance.now();
+  updateWorld(camera.position.x);
+  const t2 = performance.now();
   render();
+  const t3 = performance.now();
+  perf.tick(t3 - t0, {
+    updateMs: t2 - t1,
+    renderMs: t3 - t2,
+  });
 }
+
+setStatus("Sahne yükleniyor…");
 
 Promise.all([
   mainChar.load(),
   enemy.load({ x: 3.8, face: -1 }),
   bomber.load({ x: -20, face: 1 }),
+  staticReady,
 ])
   .then(() => {
     applyControlHud(sceneSettings.control);
+    onResize();
     animate();
   })
   .catch((err) => {

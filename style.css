@@ -20,11 +20,24 @@ canvas {
   height: 100%;
 }
 
-#menuToggle {
+#topToggles {
   position: fixed;
   top: 12px;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+}
+
+#menuToggle,
+#editorToggle,
+#clearPlacementsBtn {
+  position: relative;
+  top: auto;
+  left: auto;
+  transform: none;
   z-index: 30;
   width: 44px;
   height: 44px;
@@ -44,14 +57,28 @@ canvas {
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
 }
 
-#menuToggle:hover {
+#menuToggle:hover,
+#editorToggle:hover,
+#clearPlacementsBtn:hover {
   background: rgba(20, 32, 56, 0.9);
   border-color: rgba(158, 197, 255, 0.45);
 }
 
-#menuToggle[aria-expanded="true"] {
+#clearPlacementsBtn:hover {
+  background: rgba(56, 20, 28, 0.92);
+  border-color: rgba(255, 140, 140, 0.5);
+  color: #ffd0d0;
+}
+
+#menuToggle[aria-expanded="true"],
+#editorToggle[aria-expanded="true"] {
   background: rgba(158, 197, 255, 0.28);
   border-color: rgba(158, 197, 255, 0.55);
+}
+
+#editorToggle[aria-expanded="true"] {
+  background: rgba(100, 200, 140, 0.28);
+  border-color: rgba(100, 200, 140, 0.55);
 }
 
 .menu-toggle-icon {
@@ -67,6 +94,51 @@ body.menus-hidden #rightPanels {
   visibility: hidden;
   pointer-events: none;
   transform: translateY(-8px);
+}
+
+body.editor-hidden #assetEditorPanel {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-8px);
+}
+
+#assetEditorPanel {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  transform: none;
+  z-index: 20;
+  width: min(340px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(8, 14, 28, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+  user-select: none;
+  transition: opacity 0.18s ease, visibility 0.18s ease, transform 0.18s ease;
+}
+
+#assetEditorPanel[hidden] {
+  display: block;
+}
+
+#assetEditorPanel h2 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9ec5ff;
+  margin-bottom: 4px;
+}
+
+#assetEditorPanel > .hint {
+  font-size: 11px;
+  color: rgba(232, 238, 252, 0.65);
+  margin-bottom: 10px;
 }
 
 #leftColumn,
@@ -172,6 +244,124 @@ body.menus-hidden #rightPanels {
 
 .scene-full-btn:hover {
   background: rgba(255, 120, 120, 0.3);
+}
+
+.ae-toggle.active {
+  background: rgba(100, 200, 140, 0.28) !important;
+  border-color: rgba(100, 200, 140, 0.5) !important;
+}
+
+.ae-pause.active {
+  background: rgba(255, 180, 80, 0.3) !important;
+  border-color: rgba(255, 180, 80, 0.55) !important;
+}
+
+.ae-label {
+  display: block;
+  font-size: 11px;
+  color: rgba(232, 238, 252, 0.75);
+  margin: 8px 0 4px;
+}
+
+.ae-label select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.35);
+  color: #e8eefc;
+  font-size: 12px;
+}
+
+.ae-list {
+  margin-top: 8px;
+  max-height: 120px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ae-list-item {
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(158, 197, 255, 0.08);
+  color: #e8eefc;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ae-list-item span {
+  display: block;
+  opacity: 0.55;
+  font-size: 10px;
+}
+
+.ae-list-item.active {
+  background: rgba(158, 197, 255, 0.3);
+  border-color: rgba(158, 197, 255, 0.55);
+}
+
+.ae-empty {
+  margin: 4px 0 !important;
+}
+
+.ae-fields {
+  margin-top: 6px;
+}
+
+.ae-xyz {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.ae-xyz input,
+.ae-uni {
+  width: 100%;
+  padding: 5px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.35);
+  color: #e8eefc;
+  font-size: 11px;
+}
+
+.ae-uni {
+  width: 64px;
+  display: inline-block;
+  margin-left: 6px;
+}
+
+.ae-copy-row {
+  margin-top: 8px;
+}
+
+.ae-copy-row button,
+#assetEditorPanel .scene-mode-row button {
+  flex: 1;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(158, 197, 255, 0.12);
+  color: #e8eefc;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ae-copy-row button:hover,
+#assetEditorPanel .scene-mode-row button:hover {
+  background: rgba(158, 197, 255, 0.22);
+}
+
+#aeGizmoMode button.active {
+  background: rgba(158, 197, 255, 0.35);
+  border-color: rgba(158, 197, 255, 0.55);
 }
 
 #enemyHpWrap {

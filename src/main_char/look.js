@@ -5,7 +5,10 @@ export const lookSimple = {
   shine: 0,
   lift: 0.4,
   /** Kamera Z — küçük = yakın, büyük = uzak */
-  zoom: 14.0,
+  zoom: 20.0,
+  /** 2D/2.5D çerçeve — yüksek = alt ölü bölge az, oyun bandı merkez */
+  camY: 6.0,
+  lookY: 5.0,
 };
 
 /** Kılıf: pos birim local, rot derece (UI) */
@@ -76,14 +79,16 @@ export function createLookController({
   getMaterials,
   getBaseColors,
   getCharLights,
+  getCharEnvMap,
 }) {
   function applyLookSettings() {
     const lights = getCharLights?.();
     if (lights) {
-      lights.hemi.intensity = 1.15;
-      lights.sun.intensity = 1.35;
-      lights.fill.intensity = 0;
-      lights.rim.intensity = 0;
+      // CHAR-only: hemi + kamera fill (okunur) + ay sun/rim
+      lights.hemi.intensity = 0.7;
+      lights.sun.intensity = 1.0;
+      lights.fill.intensity = 0.95;
+      lights.rim.intensity = 0.4;
       lights.key.intensity = 0;
     }
 
@@ -92,7 +97,9 @@ export function createLookController({
     const C = lookSimple.lift;
     const roughness = 1 - S * 0.75;
     const metalness = S * 0.28;
-    const envMap = S * 1.4;
+    // Shine 0 olsa bile hafif IBL — kapkara kalmasın
+    const envMap = Math.max(0.45, S * 1.4);
+    const charEnv = getCharEnvMap?.() || null;
     const mats = getMaterials();
     const bases = getBaseColors();
 
@@ -100,7 +107,8 @@ export function createLookController({
       const mat = mats[i];
       mat.roughness = roughness;
       mat.metalness = metalness;
-      mat.envMapIntensity = envMap;
+      if ("envMap" in mat) mat.envMap = charEnv;
+      mat.envMapIntensity = charEnv ? envMap : 0;
       if (bases[i] && mat.color) {
         mat.color.copy(bases[i]);
         mat.color.multiplyScalar(L);
@@ -137,9 +145,18 @@ export function createLookController({
         min: 3.5,
         max: 20,
       },
+      {
+        key: "camY",
+        label: "Kamera yukarı / aşağı",
+        step: 0.05,
+        min: 0.8,
+        max: 6,
+      },
     ];
 
     root.innerHTML = "";
+    /** camY − lookY varsayılan farkı — çerçeve bozulmasın */
+    const lookOffset = lookSimple.camY - lookSimple.lookY;
     for (const row of rows) {
       const div = document.createElement("div");
       div.className = "look-row";
@@ -153,6 +170,9 @@ export function createLookController({
       const input = div.querySelector("input");
       input.addEventListener("input", () => {
         lookSimple[row.key] = Number(input.value);
+        if (row.key === "camY") {
+          lookSimple.lookY = lookSimple.camY - lookOffset;
+        }
         applyLookSettings();
       });
       root.appendChild(div);

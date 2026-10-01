@@ -16,6 +16,8 @@ import { createSwordTrail } from "../main_char/swordTrail.js";
 import { createRunDustFx } from "../fx/runDust.js";
 import { sceneSettings } from "../scene/sceneMenu.js";
 import { getViewCam, facingYaw } from "../scene/viewMode.js";
+import { lookSimple } from "../main_char/look.js";
+import { dynamicShadowCast, applyCasterPolicy, applyDynamicCharEnv } from "../scene/shadowPolicy.js";
 
 const GRAVITY = 28;
 const JUMP_VY = 9.2;
@@ -75,6 +77,7 @@ export function createEnemy({
   const hpWrap = document.getElementById("enemyHpWrap");
   const hpFill = document.getElementById("enemyHpFill");
   const runDustFx = createRunDustFx(scene, { layer: layerChar });
+  let appliedCharEnv = null;
 
   let knifeTrailL = null;
   let knifeTrailR = null;
@@ -674,14 +677,18 @@ export function createEnemy({
     visual.traverse((obj) => {
       obj.layers.set(layerChar);
       if (obj.isMesh) {
-        obj.castShadow = true;
+        obj.castShadow = dynamicShadowCast.enemy;
         obj.receiveShadow = true;
+        obj.userData.dynamicShadowCaster = true;
+        obj.userData.dynamicShadowKind = "enemy";
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         for (const mat of mats) {
           if (mat) enemyMaterials.push(mat);
         }
       }
     });
+    applyCasterPolicy(visual, "enemy");
+    applyDynamicCharEnv(enemyMaterials, scene.userData.charEnvMap || null, 0.55);
 
     const size = new THREE.Vector3();
     new THREE.Box3().setFromObject(visual).getSize(size);
@@ -924,14 +931,15 @@ export function createEnemy({
     const targetCamX = character.position.x + sideOff;
     const targetLookX = character.position.x - lookOff;
     camera.position.x += (targetCamX - camera.position.x) * turnK;
-    camera.position.y = 2.1;
+    camera.position.y = lookSimple.camY ?? 2.75;
     camera.position.z = CAM_Z;
     camera.up.set(0, 1, 0);
-    camera.lookAt(targetLookX, 1.1, 0);
+    camera.lookAt(targetLookX, lookSimple.lookY ?? 1.75, 0);
 
-    if (envSun) {
-      envSun.target.position.set(character.position.x, 0.8, 0);
-      envSun.target.updateMatrixWorld();
+    const env = scene.userData.charEnvMap || null;
+    if (env !== appliedCharEnv) {
+      appliedCharEnv = env;
+      applyDynamicCharEnv(enemyMaterials, env, 0.55);
     }
   }
 
