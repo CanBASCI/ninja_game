@@ -960,9 +960,15 @@ export function buildScenePack3(root, opts = {}) {
   loadStaticGlb(`${BASE}/props/climb/Knotted_Ladder_1001153335.glb`, (src) => {
     const model = src.clone(true);
     prepareEnvMesh(model);
-    model.position.set(13.2, 0.95, -1.55);
-    model.rotation.set(0, THREE.MathUtils.degToRad(8.594), 0);
-    model.scale.set(1, 1, 1);
+    // Fener PointLight yıkamasın — unlit + karartılmış albedo
+    dimNightProp(model, 0.3);
+    model.position.set(13.053, 3.371, -3.185);
+    model.rotation.set(
+      THREE.MathUtils.degToRad(-51.66),
+      THREE.MathUtils.degToRad(-52.507),
+      THREE.MathUtils.degToRad(-40.033),
+    );
+    model.scale.set(2.763, 4.062, 3.966);
     root.add(model);
     registerEditable(model, {
       id: "s3_ladder",
@@ -1370,6 +1376,33 @@ function prepareEnvMesh(root) {
       if ("envMap" in m) m.envMap = null;
       if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
     }
+  });
+}
+
+/** Gece prop — PointLight almasın; map kalsın ama karartılsın */
+function dimNightProp(model, dim = 0.32) {
+  const tint = new THREE.Color(0xffffff).multiplyScalar(dim);
+  model.traverse((obj) => {
+    if (!obj.isMesh || !obj.material) return;
+    const srcMats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    const next = srcMats.map((src) => {
+      const mat = new THREE.MeshBasicMaterial({
+        color: tint.clone(),
+        map: src.map || null,
+        transparent: !!src.transparent,
+        opacity: src.opacity ?? 1,
+        alphaTest: src.alphaTest ?? 0,
+        side: src.side ?? THREE.FrontSide,
+        fog: true,
+        depthWrite: true,
+      });
+      if (mat.map) mat.map.colorSpace = THREE.SRGBColorSpace;
+      mat.name = src.name || "";
+      return mat;
+    });
+    obj.material = Array.isArray(obj.material) ? next : next[0];
+    obj.castShadow = true;
+    obj.receiveShadow = false;
   });
 }
 

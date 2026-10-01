@@ -698,6 +698,11 @@ export function createAssetEditor(opts) {
             scale: [4.257, 4.105, 4.769],
             rotation: [0, 88.329, 0],
           },
+          s3_ladder: {
+            position: [13.053, 3.371, -3.185],
+            scale: [2.763, 4.062, 3.966],
+            rotation: [-51.66, -52.507, -40.033],
+          },
           s3_lantern_0: {
             lockX: false,
             position: [-5, -0.035, 2.0],
