@@ -712,8 +712,8 @@ export function createAssetEditor(opts) {
             scale: [29.678, 18.621, 1],
           },
           s3_temple: {
-            position: [-4.109, 10.833, -6.366],
-            scale: [-7.66, 10.737, 15.728],
+            position: [-4.109, 12.115, -6.366],
+            scale: [-7.66, 12.121, 15.728],
             rotation: [1.013, -89.835, 0.943],
           },
           s3_temple_l: {
@@ -733,8 +733,7 @@ export function createAssetEditor(opts) {
             rotation: [0, 90, 0],
           },
           s3_torii: {
-            lockX: false,
-            position: [32, 3.746, -0.09],
+            position: [41.67, 3.746, -0.09],
             scale: [4.257, 4.105, 4.769],
             rotation: [0, 88.329, 0],
           },

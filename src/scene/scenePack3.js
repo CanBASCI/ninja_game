@@ -989,7 +989,7 @@ export function buildScenePack3(root, opts = {}) {
   loadStaticGlb(`${BASE}/zones/tori_gate.glb`, (src) => {
     const model = src.clone(true);
     prepareEnvMesh(model);
-    model.position.set(32, 3.746, -0.09);
+    model.position.set(41.67, 3.746, -0.09);
     model.rotation.set(0, THREE.MathUtils.degToRad(88.329), 0);
     model.scale.set(4.257, 4.105, 4.769);
     root.add(model);
@@ -1198,13 +1198,13 @@ export function buildScenePack3(root, opts = {}) {
   loadStaticGlb(BUILDING_PINK, (src) => {
     const model = src.clone(true);
     prepareEnvMesh(model);
-    model.position.set(-4.109, 10.833, -6.366);
+    model.position.set(-4.109, 12.115, -6.366);
     model.rotation.set(
       THREE.MathUtils.degToRad(1.013),
       THREE.MathUtils.degToRad(-89.835),
       THREE.MathUtils.degToRad(0.943),
     );
-    model.scale.set(-7.66, 10.737, 15.728);
+    model.scale.set(-7.66, 12.121, 15.728);
     root.add(model);
     registerEditable(model, {
       id: "s3_temple",
