@@ -3,6 +3,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { addRopeAnchor } from "./ropeAnchors.js";
 import { bakeBillboard, placeBillboard, billboardFromMap } from "./billboardBake.js";
 
+const LAYER_ENV = 0;
+const LAYER_CHAR = 1;
+
 const BASE = "./public/scene2";
 const ASSET_2D = "./public/asset_2d";
 const TEMPLE_2D = `${ASSET_2D}/buildings/moonlit_temple`;
@@ -50,7 +53,7 @@ export function buildScenePack3(root, opts = {}) {
     });
   }
 
-  let staticLeft = 9;
+  let staticLeft = 10;
   function markStaticReady() {
     staticLeft -= 1;
     if (staticLeft <= 0) onStaticReady?.();
@@ -125,6 +128,12 @@ export function buildScenePack3(root, opts = {}) {
     model.position.y -= box2.min.y;
   }
 
+  /** Root 2B — sadece Y, sınırlı dönüş (tam Sprite kadar dönmesin) */
+  const yBillboards = [];
+  const Y_BILLBOARD_AMOUNT = 0.38;
+  const Y_BILLBOARD_MAX = 0.4;
+  const CAM_Z = 20;
+
   /**
    * Sprite gölge atmaz — alpha silüetli dik plane + zemin blob.
    * castShadow plane, bakeEnvShadows ile statik gölgeye girer.
@@ -146,8 +155,8 @@ export function buildScenePack3(root, opts = {}) {
       side: THREE.DoubleSide,
     });
     const caster = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), invis);
-    // Sprite center alt kenar → local Y 0.5 = gövde ortası; scale parent’tan gelir
-    caster.position.set(0, 0.5, 0);
+    // Sprite: alt kenar merkez → 0.5; Mesh plane: geometri merkez → 0
+    caster.position.set(0, spr.isSprite ? 0.5 : 0, 0);
     caster.castShadow = true;
     caster.receiveShadow = false;
     caster.frustumCulled = false;
@@ -161,6 +170,9 @@ export function buildScenePack3(root, opts = {}) {
     caster.userData.editorPickIgnore = true;
     caster.raycast = () => {};
     spr.add(caster);
+
+    // Mid/far: sadece bake caster (yuvarlak blob parallax ile kayıyordu)
+    if (opts.skipBlob) return;
 
     // Yumuşak temas gölgesi (bake yumuşak kalsa bile okunur)
     const blob = new THREE.Mesh(
@@ -195,63 +207,98 @@ export function buildScenePack3(root, opts = {}) {
     const mat = bake.sprite.material.clone();
     if (p.tint != null) mat.color.set(p.tint);
     if (p.fog === false) mat.fog = false;
-    const spr = new THREE.Sprite(mat);
-    spr.center.set(0.5, 0);
-    spr.userData.worldH = bake.worldH;
-    spr.userData.worldW = bake.worldW;
-    spr.castShadow = false;
-    spr.receiveShadow = false;
-    spr.renderOrder = p.renderOrder ?? 2;
+
+    // mid/far: sabit düzlem. root: sadece Y billboard (hafif — tam Sprite kadar dönmesin)
+    const layer = p.parentLayer || "root";
+    const fixedFacing =
+      p.fixedFacing === true || layer === "mid" || layer === "far";
+    const yBillboard = !fixedFacing && p.yBillboard !== false;
+
+    let w;
+    let h;
+    let yBase;
     if (Array.isArray(scale)) {
-      // Editör export’u absolute sprite.scale yazar (örn. 11.8×18.8).
-      // Eski relative faktörler (0.3–1.2) bake worldW/H ile çarpılır.
       const abs =
         p.absoluteScale === true ||
         Math.max(Math.abs(scale[0]), Math.abs(scale[1])) > 2.5;
       if (abs) {
-        spr.scale.set(scale[0], scale[1], scale[2] ?? 1);
-        // Absolute: y editör/final — ekstra sink yok
-        spr.position.set(p.x, p.y ?? 0, p.z);
+        w = scale[0];
+        h = scale[1];
+        yBase = p.y ?? 0;
       } else {
-        const h = bake.worldH * scale[1];
-        spr.scale.set(bake.worldW * scale[0], bake.worldH * scale[1], 1);
-        spr.position.set(p.x, (p.y ?? 0) - h * sink, p.z);
+        w = bake.worldW * scale[0];
+        h = bake.worldH * scale[1];
+        yBase = (p.y ?? 0) - h * sink;
       }
     } else {
-      const h = bake.worldH * scale;
-      placeBillboard(spr, {
-        x: p.x,
-        y: (p.y ?? 0) - h * sink,
-        z: p.z,
-        scale,
-      });
+      w = bake.worldW * scale;
+      h = bake.worldH * scale;
+      yBase = (p.y ?? 0) - h * sink;
     }
-    parent.add(spr);
+
+    let obj;
+    if (fixedFacing || yBillboard) {
+      const meshMat = new THREE.MeshBasicMaterial({
+        map: mat.map,
+        color: mat.color.clone(),
+        transparent: true,
+        alphaTest: mat.alphaTest ?? 0.12,
+        depthWrite: false,
+        fog: mat.fog,
+        side: THREE.DoubleSide,
+      });
+      obj = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), meshMat);
+      obj.position.set(p.x, yBase + h * 0.5, p.z);
+      obj.scale.set(w, h, 1);
+      if (fixedFacing) {
+        obj.userData.fixedFacing = true;
+      } else {
+        obj.userData.yBillboard = true;
+        yBillboards.push(obj);
+      }
+    } else {
+      obj = new THREE.Sprite(mat);
+      obj.center.set(0.5, 0);
+      obj.scale.set(w, h, 1);
+      obj.position.set(p.x, yBase, p.z);
+      obj.userData.billboard = true;
+    }
+    obj.userData.worldH = bake.worldH;
+    obj.userData.worldW = bake.worldW;
+    obj.castShadow = false;
+    obj.receiveShadow = false;
+    obj.renderOrder =
+      p.renderOrder ?? (layer === "mid" ? 2.15 : layer === "far" ? 1.3 : 2.85);
+    parent.add(obj);
 
     const wantShadow =
-      p.castEnvShadow === true ||
-      p.group === "trees" ||
-      p.group === "buildings" ||
-      p.group === "foliage";
+      layer !== "far" &&
+      (p.castEnvShadow === true ||
+        p.group === "trees" ||
+        p.group === "buildings" ||
+        p.group === "foliage" ||
+        p.group === "jump" ||
+        p.group === "auto_jump");
     if (wantShadow && bake.map) {
       const isTree = p.group === "trees";
       const isFoliage = p.group === "foliage";
-      attachBillboardShadow(spr, bake.map, parent, {
+      attachBillboardShadow(obj, bake.map, parent, {
         alphaTest: isTree ? 0.28 : isFoliage ? 0.32 : 0.4,
         blobOpacity: isTree ? 0.34 : isFoliage ? 0.26 : 0.22,
+        skipBlob: layer === "mid",
       });
     }
 
     if (p.id && p.path) {
-      registerEditable(spr, {
+      registerEditable(obj, {
         id: p.id,
         path: p.path,
         group: p.group || "decor",
         role: p.role || "decor",
-        parent: p.parentLayer || "root",
+        parent: layer,
       });
     }
-    return spr;
+    return obj;
   }
 
   // Scene2 ile aynı parallax
@@ -264,15 +311,16 @@ export function buildScenePack3(root, opts = {}) {
   const nearFactor = 0.78;
 
   // --- Zemin (Scene2) ---
-  const cobbleDiff = loadColorMap(loader, `${BASE}/ground/cobble_diff.jpg`, [10, 1.6]);
-  const cobbleNor = loadDataMap(loader, `${BASE}/ground/cobble_nor.jpg`, [10, 1.6]);
-  const cobbleRough = loadDataMap(loader, `${BASE}/ground/cobble_rough.jpg`, [10, 1.6]);
+  const cobbleDiff = loadColorMap(loader, `${BASE}/ground/cobble_diff.jpg`, [10, 2.4]);
+  const cobbleNor = loadDataMap(loader, `${BASE}/ground/cobble_nor.jpg`, [10, 2.4]);
+  const cobbleRough = loadDataMap(loader, `${BASE}/ground/cobble_rough.jpg`, [10, 2.4]);
   const plankDiff = loadColorMap(loader, `${BASE}/wood/planks_diff.jpg`, [14, 1.2]);
   const plankNor = loadDataMap(loader, `${BASE}/wood/planks_nor.jpg`, [14, 1.2]);
   const plankRough = loadDataMap(loader, `${BASE}/wood/planks_rough.jpg`, [14, 1.2]);
 
+  // Ana cobble — mid derinliğine kadar uzat (z ≈ +2.8 … −12)
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(90, 10),
+    new THREE.PlaneGeometry(90, 15),
     new THREE.MeshStandardMaterial({
       map: cobbleDiff,
       normalMap: cobbleNor,
@@ -284,7 +332,7 @@ export function buildScenePack3(root, opts = {}) {
     }),
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.z = -2.2;
+  ground.position.z = -4.6;
   ground.receiveShadow = true;
   root.add(ground);
 
@@ -324,7 +372,9 @@ export function buildScenePack3(root, opts = {}) {
 
   // Mid / far dekor zemini — ana cobble (z≈-7.2 arkası) ile örtüşmesin (z-fight = parlama)
   // Unlit: gece ışığında Specular/normal titremesi olmasın
-  // Nötr gri (mor cast yok) — cobble paletine uyumlu
+  // Mid dekor zemini — ana cobble (z≈-7.2 arkası) ile örtüşmesin (z-fight = parlama)
+  // Unlit: gece ışığında Specular/normal titremesi olmasın
+  // Nötr gri (texture/kırmızı yok)
   const midGround = new THREE.Mesh(
     new THREE.PlaneGeometry(90, 5),
     new THREE.MeshBasicMaterial({
@@ -407,17 +457,31 @@ export function buildScenePack3(root, opts = {}) {
     }
   }
   addMist(far, [
-    { x: -40, y: 3.0, z: -19, map: 0, op: 0.55, ry: 0.04, order: 1, w: 75, h: 22, drift: 0.35, phase: 0.1 },
-    { x: -12, y: 3.0, z: -19.5, map: 1, op: 0.55, ry: -0.03, order: 1, w: 75, h: 22, drift: 0.33, phase: 0.7 },
-    { x: 14, y: 3.0, z: -20, map: 2, op: 0.52, ry: 0.03, order: 1, w: 75, h: 22, drift: 0.32, phase: 1.3 },
-    { x: 40, y: 2.5, z: -20.5, map: 0, op: 0.52, ry: -0.04, order: 1, w: 75, h: 21, drift: 0.3, phase: 1.9 },
-    { x: 65, y: 2.5, z: -21, map: 1, op: 0.5, ry: 0.04, order: 1, w: 70, h: 21, drift: 0.28, phase: 2.5 },
+    // Arka peçe duvarı — mid sonrası boşluğu kapat
+    { x: -40, y: 3.2, z: -18.5, map: 0, op: 0.72, ry: 0.04, order: 1, w: 80, h: 26, drift: 0.28, phase: 0.1 },
+    { x: -12, y: 3.2, z: -19.2, map: 1, op: 0.74, ry: -0.03, order: 1, w: 80, h: 26, drift: 0.26, phase: 0.7 },
+    { x: 14, y: 3.1, z: -19.8, map: 2, op: 0.72, ry: 0.03, order: 1, w: 80, h: 26, drift: 0.25, phase: 1.3 },
+    { x: 40, y: 2.8, z: -20.4, map: 0, op: 0.7, ry: -0.04, order: 1, w: 78, h: 25, drift: 0.24, phase: 1.9 },
+    { x: 65, y: 2.8, z: -21.0, map: 1, op: 0.68, ry: 0.04, order: 1, w: 75, h: 24, drift: 0.22, phase: 2.5 },
+    // İkinci sıra — daha yoğun / biraz önde (mid→far geçiş)
+    { x: -28, y: 2.6, z: -16.2, map: 2, op: 0.48, ry: -0.02, order: 1.2, w: 70, h: 18, drift: 0.3, phase: 0.4 },
+    { x: 0, y: 2.7, z: -16.8, map: 0, op: 0.5, ry: 0.03, order: 1.2, w: 72, h: 18, drift: 0.28, phase: 1.0 },
+    { x: 28, y: 2.5, z: -17.2, map: 1, op: 0.48, ry: -0.03, order: 1.2, w: 70, h: 17, drift: 0.27, phase: 1.8 },
+    { x: 52, y: 2.4, z: -17.6, map: 2, op: 0.46, ry: 0.02, order: 1.2, w: 68, h: 17, drift: 0.26, phase: 2.4 },
   ]);
   addMist(mid, [
-    { x: -10, y: 2.4, z: -9.5, map: 2, op: 0.55, ry: -0.04, order: 2, w: 55, h: 8, drift: 0.45, phase: 0.4 },
-    { x: 8, y: 2.5, z: -10, map: 1, op: 0.58, ry: 0.05, order: 2, w: 58, h: 8.2, drift: 0.42, phase: 1.1 },
-    { x: 26, y: 2.3, z: -11, map: 0, op: 0.55, ry: -0.05, order: 2, w: 55, h: 7.8, drift: 0.4, phase: 2.2 },
-    { x: 42, y: 2.2, z: -11.5, map: 2, op: 0.5, ry: 0.04, order: 2, w: 52, h: 7.5, drift: 0.38, phase: 3.0 },
+    // Mid peçe — renderOrder < root (2.8+) ki root sisin arkasında kalmasın
+    { x: -10, y: 2.5, z: -9.5, map: 2, op: 0.7, ry: -0.04, order: 1.55, w: 58, h: 9.5, drift: 0.4, phase: 0.4 },
+    { x: 8, y: 2.6, z: -10.0, map: 1, op: 0.72, ry: 0.05, order: 1.55, w: 60, h: 9.6, drift: 0.38, phase: 1.1 },
+    { x: 26, y: 2.4, z: -10.8, map: 0, op: 0.7, ry: -0.05, order: 1.55, w: 58, h: 9.2, drift: 0.36, phase: 2.2 },
+    { x: 42, y: 2.3, z: -11.4, map: 2, op: 0.68, ry: 0.04, order: 1.55, w: 55, h: 9, drift: 0.34, phase: 3.0 },
+    { x: -22, y: 2.2, z: -11.8, map: 0, op: 0.62, ry: 0.03, order: 1.55, w: 52, h: 8.5, drift: 0.35, phase: 0.8 },
+    { x: 16, y: 2.3, z: -12.2, map: 1, op: 0.65, ry: -0.03, order: 1.55, w: 54, h: 8.6, drift: 0.33, phase: 2.6 },
+    // Mid içi — root’un altında kalsın
+    { x: -16, y: 2.0, z: -8.6, map: 1, op: 0.36, ry: 0.02, order: 1.65, w: 48, h: 7.2, drift: 0.42, phase: 0.2 },
+    { x: -2, y: 2.1, z: -8.9, map: 0, op: 0.34, ry: -0.03, order: 1.65, w: 46, h: 7, drift: 0.4, phase: 1.4 },
+    { x: 12, y: 2.0, z: -8.4, map: 2, op: 0.36, ry: 0.04, order: 1.65, w: 48, h: 7.2, drift: 0.38, phase: 2.0 },
+    { x: 30, y: 1.9, z: -9.0, map: 1, op: 0.34, ry: -0.02, order: 1.65, w: 46, h: 6.8, drift: 0.36, phase: 2.8 },
   ]);
   addMist(nearFx, [
     { x: 8, y: 1.4, z: 3.0, map: 1, op: 0.08, ry: 0.03, order: 4, w: 38, h: 3.2, drift: 0.55, phase: 0.9 },
@@ -590,6 +654,63 @@ export function buildScenePack3(root, opts = {}) {
           });
         }
       }
+
+      // Mid — küçük sakura serpiştirme (parallax dolgu)
+      const midTrees = [
+        {
+          id: "s3_sakura_m0",
+          bake: purpleBake,
+          path: "trees/sakura_tree_1001152836.glb",
+          x: -16.5,
+          y: -0.2,
+          z: -9.0,
+          scale: [14.5, 9.2, 1],
+          tint: 0xe8d0e8,
+        },
+        {
+          id: "s3_sakura_m1",
+          bake: packBakes[0] || purpleBake,
+          path: "trees/sakura.glb",
+          x: 7.0,
+          y: -0.2,
+          z: -9.6,
+          scale: [13.2, 8.4, 1],
+          tint: 0xd8e0f0,
+        },
+        {
+          id: "s3_sakura_m2",
+          bake: purpleBake || packBakes[1],
+          path: "trees/sakura_tree_1001152836.glb",
+          x: 22.5,
+          y: -0.2,
+          z: -8.8,
+          scale: [15.0, 9.5, 1],
+          tint: 0xffe8f4,
+        },
+      ];
+      for (const t of midTrees) {
+        if (!t.bake) continue;
+        spawnGrounded(
+          t.bake,
+          mid,
+          {
+            id: t.id,
+            path: t.path,
+            group: "trees",
+            role: "decor",
+            parentLayer: "mid",
+            x: t.x,
+            y: t.y,
+            z: t.z,
+            scale: t.scale,
+            tint: t.tint,
+            absoluteScale: true,
+            castEnvShadow: false,
+            renderOrder: 2.3,
+          },
+          0,
+        );
+      }
     } catch (err) {
       console.warn("Scene3 sakura:", err);
     } finally {
@@ -599,16 +720,17 @@ export function buildScenePack3(root, opts = {}) {
 
   // --- Fenerler 3D (Scene2) ---
   // Kamera tarafı: yola bakan açı; yol mesafesi |z|=2.00; X serbest
+  // Boy: Y uzatıldı (kısa / yere yapışık durmasın)
   const LANTERN_NEAR = {
     y: -0.035,
     z: 2.0,
     rotation: [0, 88.558, 0],
-    scale: [0.72, 0.72, 0.72],
+    scale: [0.82, 1.55, 0.82],
   };
   const lanternSpecs = [
     {
       id: "s3_lantern_0",
-      color: 0xffc15a,
+      color: 0xff4fa3,
       position: [-5, LANTERN_NEAR.y, LANTERN_NEAR.z],
       rotation: [...LANTERN_NEAR.rotation],
       scale: [...LANTERN_NEAR.scale],
@@ -618,18 +740,18 @@ export function buildScenePack3(root, opts = {}) {
       color: 0xff4fa3,
       position: [7.556, -0.005, -2.0],
       rotation: [-180, -88.624, -180],
-      scale: [0.72, 0.72, 0.72],
+      scale: [0.82, 1.55, 0.82],
     },
     {
       id: "s3_lantern_2",
-      color: 0x3ee0ff,
+      color: 0xff4fa3,
       position: [16, LANTERN_NEAR.y, LANTERN_NEAR.z],
       rotation: [...LANTERN_NEAR.rotation],
       scale: [...LANTERN_NEAR.scale],
     },
     {
       id: "s3_lantern_3",
-      color: 0xffa033,
+      color: 0xff4fa3,
       position: [25.5, LANTERN_NEAR.y, LANTERN_NEAR.z],
       rotation: [...LANTERN_NEAR.rotation],
       scale: [...LANTERN_NEAR.scale],
@@ -650,6 +772,20 @@ export function buildScenePack3(root, opts = {}) {
           THREE.MathUtils.degToRad(spec.rotation[2]),
         );
         model.scale.set(...spec.scale);
+        // Mor glow: geniş yer aydınlatması (yüksek + uzun menzil + yumuşak decay)
+        const glow = new THREE.PointLight(spec.color, 4.8, 32, 0.85);
+        glow.castShadow = false;
+        glow.layers.set(LAYER_ENV);
+        glow.layers.enable(LAYER_CHAR);
+        model.add(glow);
+        model.updateMatrixWorld(true);
+        const laneAim = new THREE.Vector3(
+          spec.position[0],
+          Math.max(1.8, spec.position[1] + 2.1),
+          THREE.MathUtils.lerp(spec.position[2], 0.15, 0.88),
+        );
+        model.worldToLocal(laneAim);
+        glow.position.copy(laneAim);
         root.add(model);
         registerEditable(model, {
           id: spec.id,
@@ -686,7 +822,7 @@ export function buildScenePack3(root, opts = {}) {
     });
   });
 
-  loadStaticGlb(`${BASE}/props/jump/Stone_Formation.glb`, (src) => {
+  loadStaticGlb(`${BASE}/props/jump/Stone_Formation.glb`, async (src) => {
     const model = src.clone(true);
     prepareEnvMesh(model);
     model.position.set(9.624, 0.461, 0.043);
@@ -704,7 +840,88 @@ export function buildScenePack3(root, opts = {}) {
       role: "vault",
       parent: "root",
     });
+
+    // Mid — 2B taş serpiştirme
+    const stoneBake = await bakeQueued(src, {
+      size: 640,
+      lighting: "night",
+      yaw: THREE.MathUtils.degToRad(18),
+      alphaTest: 0.15,
+    });
+    if (stoneBake) {
+      const midStones = [
+        { id: "s3_mid_stone_0", x: -12.5, y: -0.04, z: -8.4, scale: [2.4, 1.55, 1] },
+        { id: "s3_mid_stone_1", x: -1.2, y: -0.04, z: -9.6, scale: [1.9, 1.25, 1] },
+        { id: "s3_mid_stone_2", x: 8.8, y: -0.04, z: -8.7, scale: [2.6, 1.7, 1] },
+        { id: "s3_mid_stone_3", x: 19.4, y: -0.04, z: -9.9, scale: [2.1, 1.35, 1] },
+        { id: "s3_mid_stone_4", x: 29.0, y: -0.04, z: -8.5, scale: [2.3, 1.5, 1] },
+      ];
+      for (const s of midStones) {
+        spawnGrounded(
+          stoneBake,
+          mid,
+          {
+            id: s.id,
+            path: "props/jump/Stone_Formation.glb",
+            group: "jump",
+            role: "decor",
+            parentLayer: "mid",
+            x: s.x,
+            y: s.y,
+            z: s.z,
+            scale: s.scale,
+            tint: 0x7a8490,
+            absoluteScale: true,
+            castEnvShadow: false,
+            renderOrder: 2.15,
+          },
+          0,
+        );
+      }
+    }
   });
+
+  // Mid rock clusters (2B)
+  loadStaticGlb(
+    `${BASE}/props/auto_jump/Rock_Formation_1001.glb`,
+    async (src) => {
+      const bake = await bakeQueued(src, {
+        size: 640,
+        lighting: "night",
+        yaw: THREE.MathUtils.degToRad(-25),
+        alphaTest: 0.15,
+      });
+      if (!bake) return;
+      const rocks = [
+        { id: "s3_mid_rock_0", x: -18.5, y: -0.04, z: -9.2, scale: [2.8, 2.1, 1] },
+        { id: "s3_mid_rock_1", x: 2.6, y: -0.04, z: -8.3, scale: [2.2, 1.7, 1] },
+        { id: "s3_mid_rock_2", x: 12.4, y: -0.04, z: -9.7, scale: [2.5, 1.9, 1] },
+        { id: "s3_mid_rock_3", x: 36.0, y: -0.04, z: -8.8, scale: [2.6, 2.0, 1] },
+      ];
+      for (const s of rocks) {
+        spawnGrounded(
+          bake,
+          mid,
+          {
+            id: s.id,
+            path: "props/auto_jump/Rock_Formation_1001.glb",
+            group: "auto_jump",
+            role: "decor",
+            parentLayer: "mid",
+            x: s.x,
+            y: s.y,
+            z: s.z,
+            scale: s.scale,
+            tint: 0x6e7884,
+            absoluteScale: true,
+            castEnvShadow: false,
+            renderOrder: 2.1,
+          },
+          0,
+        );
+      }
+    },
+  );
 
   // Limbo kemeri — kanonik pose (boy/rotate/scale/y-z); lane X sahneye göre
   const S3_ARCH = {
@@ -768,7 +985,7 @@ export function buildScenePack3(root, opts = {}) {
     });
   });
 
-  // --- Bamboo 2B ---
+  // --- Bamboo 2B (root + mid serpiştirme) ---
   loadStaticGlb(
     `${BASE}/foliage/Bamboo_Serenity_1001153856_texture.glb`,
     async (src) => {
@@ -777,7 +994,6 @@ export function buildScenePack3(root, opts = {}) {
           id: "s3_bamboo_0",
           parent: root,
           parentLayer: "root",
-          // arkada → biraz daha küçük; y zemin
           position: [10.5, -0.04, -6.5],
           scale: [3.2, 7.2, 1],
           yaw: 22.918,
@@ -789,6 +1005,55 @@ export function buildScenePack3(root, opts = {}) {
           position: [-23.325, -0.03, -5.4],
           scale: [3.6, 6.4, 1],
           yaw: 0,
+        },
+        // Mid — boş gövdeyi doldur (parallax mid grubu)
+        {
+          id: "s3_bamboo_m0",
+          parent: mid,
+          parentLayer: "mid",
+          position: [-14, -0.05, -8.8],
+          scale: [2.4, 5.6, 1],
+          yaw: 18,
+        },
+        {
+          id: "s3_bamboo_m1",
+          parent: mid,
+          parentLayer: "mid",
+          position: [-4.5, -0.05, -9.4],
+          scale: [2.1, 5.1, 1],
+          yaw: -12,
+        },
+        {
+          id: "s3_bamboo_m2",
+          parent: mid,
+          parentLayer: "mid",
+          position: [5.2, -0.05, -8.6],
+          scale: [2.6, 5.9, 1],
+          yaw: 28,
+        },
+        {
+          id: "s3_bamboo_m3",
+          parent: mid,
+          parentLayer: "mid",
+          position: [15.8, -0.05, -9.8],
+          scale: [2.2, 5.3, 1],
+          yaw: -6,
+        },
+        {
+          id: "s3_bamboo_m4",
+          parent: mid,
+          parentLayer: "mid",
+          position: [24.5, -0.05, -8.9],
+          scale: [2.5, 5.7, 1],
+          yaw: 14,
+        },
+        {
+          id: "s3_bamboo_m5",
+          parent: mid,
+          parentLayer: "mid",
+          position: [33.2, -0.05, -9.5],
+          scale: [2.0, 4.8, 1],
+          yaw: -22,
         },
       ];
       const bake = await bakeQueued(src, {
@@ -811,9 +1076,10 @@ export function buildScenePack3(root, opts = {}) {
               y: s.position[1],
               z: s.position[2],
               scale: s.scale,
-              tint: 0xa8b4c4,
+              tint: s.parentLayer === "mid" ? 0x8a96a4 : 0xa8b4c4,
               absoluteScale: true,
-              castEnvShadow: true,
+              castEnvShadow: s.parentLayer === "root",
+              renderOrder: s.parentLayer === "mid" ? 2.2 : 2.85,
             },
             0,
           );
@@ -850,6 +1116,12 @@ export function buildScenePack3(root, opts = {}) {
       { id: "s3_grass_2d", parent: root, parentLayer: "root", position: [-17.95, -0.042, 3.32], scale: [2.12, 2.62, 1], yaw: 32, tint: 0xa8b4c2 },
       { id: "s3_grass_2e", parent: root, parentLayer: "root", position: [-19.05, -0.042, 2.18], scale: [1.48, 1.88, 1], yaw: -28, tint: 0x9aa8b8 },
       { id: "s3_grass_2f", parent: root, parentLayer: "root", position: [-18.7, -0.042, 2.95], scale: [1.82, 2.28, 1], yaw: -28, tint: 0x92a0b0 },
+      // Mid ot — boşluğu doldur
+      { id: "s3_grass_m0", parent: mid, parentLayer: "mid", position: [-9.5, -0.05, -8.5], scale: [1.7, 2.4, 1], yaw: 0, tint: 0x7e8a96 },
+      { id: "s3_grass_m1", parent: mid, parentLayer: "mid", position: [0.8, -0.05, -9.3], scale: [1.55, 2.2, 1], yaw: 32, tint: 0x74808c },
+      { id: "s3_grass_m2", parent: mid, parentLayer: "mid", position: [11.2, -0.05, -8.7], scale: [1.8, 2.5, 1], yaw: -28, tint: 0x82909c },
+      { id: "s3_grass_m3", parent: mid, parentLayer: "mid", position: [21.5, -0.05, -9.5], scale: [1.6, 2.25, 1], yaw: 32, tint: 0x788490 },
+      { id: "s3_grass_m4", parent: mid, parentLayer: "mid", position: [31.8, -0.05, -8.6], scale: [1.75, 2.35, 1], yaw: -28, tint: 0x7a8692 },
     ];
     // Sadece 3 yaw bake — çeşitlilik yeterli, cold-start maliyeti düşük
     const bakeByYaw = new Map();
@@ -951,6 +1223,15 @@ export function buildScenePack3(root, opts = {}) {
       const { baseX, drift, phase } = m.userData;
       m.position.x = baseX + Math.sin(t * 0.22 + phase) * drift;
     }
+    // Root 2B: sadece Y, kısmi bakış (karton kenarı yumuşak)
+    for (const o of yBillboards) {
+      const dx = camX - o.position.x;
+      const dz = CAM_Z - o.position.z;
+      let yaw = Math.atan2(dx, dz) * Y_BILLBOARD_AMOUNT;
+      if (yaw > Y_BILLBOARD_MAX) yaw = Y_BILLBOARD_MAX;
+      else if (yaw < -Y_BILLBOARD_MAX) yaw = -Y_BILLBOARD_MAX;
+      o.rotation.y = yaw;
+    }
   }
 
   return {
@@ -1039,11 +1320,10 @@ function styleTexturedTree(tree) {
   });
 }
 
-/** Bambu fener — unlit + koyu albedo (MeshBasic map tam parlak görünmesin) */
+/** Bambu fener — tüm obje unlit; map yok; kağıt opaque (transparent depth-sort ağaç arkasına kaçmasın) */
 function tintLanternUnlit(model, colorHex) {
-  const paperColor = new THREE.Color(colorHex);
-  const PAPER_DIM = 0.34;
-  const FRAME_DIM = 0.22;
+  const paperColor = new THREE.Color(colorHex).multiplyScalar(0.62);
+  const frameColor = new THREE.Color(0x2a2218);
   model.traverse((obj) => {
     if (!obj.isMesh || !obj.material) return;
     const srcMats = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -1053,27 +1333,23 @@ function tintLanternUnlit(model, colorHex) {
         matName === "Paper" ||
         /^Paper/i.test(obj.name) ||
         /paper/i.test(matName);
-      const col = shade
-        ? paperColor.clone().multiplyScalar(PAPER_DIM)
-        : (src.color?.clone?.() || new THREE.Color(0xffffff)).multiplyScalar(
-            FRAME_DIM,
-          );
       const mat = new THREE.MeshBasicMaterial({
-        color: col,
-        map: shade ? null : src.map || null,
-        transparent: !!src.transparent,
-        opacity: src.opacity ?? 1,
-        side: THREE.DoubleSide,
+        color: shade ? paperColor : frameColor,
+        map: null,
+        transparent: false,
+        opacity: 1,
+        side: THREE.FrontSide,
         fog: true,
         depthWrite: true,
+        depthTest: true,
       });
-      if (mat.map) mat.map.colorSpace = THREE.SRGBColorSpace;
       mat.name = src.name || (shade ? "Paper" : "Bamboo");
       return mat;
     });
     obj.material = Array.isArray(obj.material) ? next : next[0];
     obj.castShadow = true;
     obj.receiveShadow = false;
+    obj.renderOrder = 1;
   });
 }
 

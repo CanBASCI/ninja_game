@@ -701,25 +701,25 @@ export function createAssetEditor(opts) {
           s3_lantern_0: {
             lockX: false,
             position: [-5, -0.035, 2.0],
-            scale: [0.72, 0.72, 0.72],
+            scale: [0.82, 1.55, 0.82],
             rotation: [0, 88.558, 0],
           },
           s3_lantern_1: {
             lockX: false,
             position: [7.556, -0.005, -2.0],
-            scale: [0.72, 0.72, 0.72],
+            scale: [0.82, 1.55, 0.82],
             rotation: [-180, -88.624, -180],
           },
           s3_lantern_2: {
             lockX: false,
             position: [16, -0.035, 2.0],
-            scale: [0.72, 0.72, 0.72],
+            scale: [0.82, 1.55, 0.82],
             rotation: [0, 88.558, 0],
           },
           s3_lantern_3: {
             lockX: false,
             position: [25.5, -0.035, 2.0],
-            scale: [0.72, 0.72, 0.72],
+            scale: [0.82, 1.55, 0.82],
             rotation: [0, 88.558, 0],
           },
           // Sakura: sadece zemin Y (−0.221) + scale; X/Z yerleri serbest

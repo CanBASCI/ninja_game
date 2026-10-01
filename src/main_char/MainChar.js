@@ -141,8 +141,11 @@ export function createMainChar(world) {
   let vaultHandTargetY = null;
   /** Vault/roll sırasında korunacak min ileri hız (koşu momentumu) */
   let vaultMomentum = 0;
-  /** Otomatik vault — aynı engelde tekrar tetiklenmesin */
+  /** Vault başındaki bakış — ortada çevirince engel asisti ters tarafa fırlatmasın */
+  let vaultFacing = 1;
+  /** Otomatik vault — aynı engelde aynı yönden spam olmasın */
   let lastAutoVaultBarrier = null;
+  let lastAutoVaultFacing = 0;
   /** Limbo altındayken tuş bırakılsa da engel bitene kadar eğilmeye devam */
   let limboCrouchHold = false;
   /** ground → up → hang → down → land → ground */
@@ -702,8 +705,9 @@ export function createMainChar(world) {
         const dur = currentAction?.getClip()?.duration ?? 1;
         const t = (currentAction?.time ?? 0) / Math.max(dur, 0.001);
         const isRoll = forcedAnim === ANIM.roll;
-        const nearFace = b.x - facing * b.halfT;
-        const farClear = b.x + facing * (b.halfT + CHAR_RADIUS + 0.25);
+        const vf = vaultFacing;
+        const nearFace = b.x - vf * b.halfT;
+        const farClear = b.x + vf * (b.halfT + CHAR_RADIUS + 0.25);
 
         if (isRoll) {
           // İlk ~1 sn (t<0.5): engelde kilitlenme — root motion ileri gidebilsin
@@ -721,23 +725,23 @@ export function createMainChar(world) {
           // İlk saniyede minimum ileri ilerleme (takılı kalmasın)
           if (t < 0.5) {
             const u = t / 0.5;
-            const fromX = vaultHandTargetX - facing * 0.55;
-            const toX = nearFace + facing * 0.35;
+            const fromX = vaultHandTargetX - vf * 0.55;
+            const toX = nearFace + vf * 0.35;
             const assistX = fromX + (toX - fromX) * u;
-            if (facing > 0) x = Math.max(x, assistX);
+            if (vf > 0) x = Math.max(x, assistX);
             else x = Math.min(x, assistX);
           }
           if (t >= 0.48) {
             const u = Math.min(1, (t - 0.48) / 0.45);
-            if (facing > 0) x = Math.max(x, nearFace + (farClear - nearFace) * u);
+            if (vf > 0) x = Math.max(x, nearFace + (farClear - nearFace) * u);
             else x = Math.min(x, nearFace + (farClear - nearFace) * u);
           }
           continue;
         }
 
         if (t <= 0.32) {
-          const bodyLimit = nearFace - facing * 0.15;
-          if (facing > 0) x = Math.min(x, bodyLimit);
+          const bodyLimit = nearFace - vf * 0.15;
+          if (vf > 0) x = Math.min(x, bodyLimit);
           else x = Math.max(x, bodyLimit);
         }
 
@@ -757,7 +761,7 @@ export function createMainChar(world) {
 
         if (t >= 0.48) {
           const u = Math.min(1, (t - 0.48) / 0.45);
-          if (facing > 0) x = Math.max(x, nearFace + (farClear - nearFace) * u);
+          if (vf > 0) x = Math.max(x, nearFace + (farClear - nearFace) * u);
           else x = Math.min(x, nearFace + (farClear - nearFace) * u);
         }
         continue;
@@ -876,19 +880,20 @@ export function createMainChar(world) {
     vaultTargetBarrier = barrier || null;
     vaultHandTargetX = null;
     vaultHandTargetY = null;
+    vaultFacing = facing < 0 ? -1 : 1;
     const curve = rootMotionCurves[animName];
     if (!curve || !barrier) return;
 
     const STANDOFF = animName === ANIM.roll ? 0.55 : 0.12;
-    vaultHandTargetX = barrier.x - facing * (barrier.halfT + STANDOFF);
+    vaultHandTargetX = barrier.x - vaultFacing * (barrier.halfT + STANDOFF);
     vaultHandTargetY = barrier.height + (animName === ANIM.roll ? 0.58 : 0.14);
 
     // Geri çekme yok — koşu momentumunu kesmesin.
     // Sadece engelin içine gömüldüysek hafif geri al.
-    const faceX = barrier.x - facing * barrier.halfT;
-    const into = (character.position.x - faceX) * facing;
+    const faceX = barrier.x - vaultFacing * barrier.halfT;
+    const into = (character.position.x - faceX) * vaultFacing;
     if (into > 0.15) {
-      character.position.x = faceX - facing * 0.05;
+      character.position.x = faceX - vaultFacing * 0.05;
     }
     if (animName === ANIM.roll) {
       character.position.y = Math.max(character.position.y, 0.58);
@@ -1012,8 +1017,12 @@ export function createMainChar(world) {
           : forcedAnim === ANIM.roll
             ? 1.75
             : 1;
+      const moveFace =
+        forcedAnim === ANIM.vault || forcedAnim === ANIM.roll
+          ? vaultFacing
+          : facing;
       const dz = (z - prevRootZ) * modelScale * boost;
-      character.position.x += facing * dz;
+      character.position.x += moveFace * dz;
     }
     if (forcedAnim === ANIM.slide) {
       // Yer animleri — sadece ileri root motion, Y kalkmasın
@@ -1878,19 +1887,30 @@ export function createMainChar(world) {
 
     if (!isRunningIntoVaultRange()) {
       lastAutoVaultBarrier = null;
+      lastAutoVaultFacing = 0;
       return;
     }
 
     const barrier = findBarrierAhead(VAULT_MAX_DIST);
     if (!barrier) {
       lastAutoVaultBarrier = null;
+      lastAutoVaultFacing = 0;
       return;
     }
-    if (barrier === lastAutoVaultBarrier) return;
+    // Aynı engel + aynı yön: landing spam engeli
+    // Ters yönden (geri dönüş) tekrar vault serbest
+    if (
+      barrier === lastAutoVaultBarrier &&
+      lastAutoVaultFacing !== 0 &&
+      facing === lastAutoVaultFacing
+    ) {
+      return;
+    }
 
     const anim = Math.random() < 0.5 ? ANIM.vault : ANIM.roll;
     if (startVault(anim, barrier)) {
       lastAutoVaultBarrier = barrier;
+      lastAutoVaultFacing = vaultFacing;
     }
   }
 
@@ -2123,6 +2143,7 @@ export function createMainChar(world) {
       const barrier = findBarrierAhead(VAULT_MAX_DIST);
       if (startVault(ANIM.vault, barrier)) {
         lastAutoVaultBarrier = barrier;
+        lastAutoVaultFacing = vaultFacing;
       }
       keys.delete("Space");
     }
@@ -2130,6 +2151,7 @@ export function createMainChar(world) {
       const barrier = findBarrierAhead(VAULT_MAX_DIST);
       if (startVault(ANIM.roll, barrier)) {
         lastAutoVaultBarrier = barrier;
+        lastAutoVaultFacing = vaultFacing;
       }
       keys.delete("KeyR");
     }
@@ -2424,14 +2446,25 @@ export function createMainChar(world) {
     const moving = left !== right;
 
     // İpte asılıyken sağ/sol ile dön (hareket yok); çıkış/inişte yön kilitli
+    // Vault/roll sırasında yön kilitli — engel asisti ters tarafa fırlatmasın
+    const vaultLocked =
+      forcedAnim === ANIM.vault || forcedAnim === ANIM.roll;
     if (
       sceneSettings.control === "main" &&
       (ropeState === "ground" || ropeState === "hang") &&
-      !swingState
+      !swingState &&
+      !vaultLocked
     ) {
+      const prevFacing = facing;
       if (left && !right) facing = -1;
       if (right && !left) facing = 1;
+      // Yön değiştiyse aynı engeli ters taraftan tekrar atlayabilsin
+      if (facing !== prevFacing) {
+        lastAutoVaultBarrier = null;
+        lastAutoVaultFacing = 0;
+      }
     }
+    if (vaultLocked) facing = vaultFacing;
 
     {
       // Karakter yumuşak döner; facing anında, görsel yaw lerp
@@ -2557,14 +2590,16 @@ export function createMainChar(world) {
         forcedAnim === ANIM.roll ||
         forcedAnim === ANIM.slide)
     ) {
-      const moved = (character.position.x - prevX) * facing;
+      const moveFace =
+        forcedAnim === ANIM.slide ? facing : vaultFacing;
+      const moved = (character.position.x - prevX) * moveFace;
       const want = vaultMomentum * dt;
       if (forcedAnim === ANIM.slide) {
         // Slide: kılıçlı/kılıçsız koşu hızı (vaultMomentum) — root motion ezmesin
         character.position.x = prevX + facing * want;
       } else if (moved < want) {
         // Vault/roll: yavaşsa tamamla, hızlıysa bırak
-        character.position.x += facing * (want - moved);
+        character.position.x += moveFace * (want - moved);
       }
     } else {
       character.position.x += facing * speed * dt;
