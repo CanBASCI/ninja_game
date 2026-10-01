@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Bake Moonlit Temple</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <pre id="log">starting…</pre>
+    <script type="module">
+      import * as THREE from "three";
+      import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+      const logEl = document.getElementById("log");
+      const log = (m) => {
+        logEl.textContent += `\n${m}`;
+      };
+
+      /** En uzun kenar — WebGL max genelde ≥4096 */
+      const BAKE_SIZE = 4096;
+      const PAD = 1.04;
+      const GLB =
+        "../public/scene2/buildings/Moonlit_Temple_Miniat_1001153446_texture.glb";
+
+      try {
+        const renderer = new THREE.WebGLRenderer({
+          antialias: true,
+          alpha: true,
+          preserveDrawingBuffer: true,
+          powerPreference: "high-performance",
+        });
+        renderer.setPixelRatio(1);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.setSize(64, 64);
+        document.body.appendChild(renderer.domElement);
+        renderer.domElement.style.cssText = "position:fixed;left:-9999px";
+
+        const maxT = renderer.capabilities.maxTextureSize || 4096;
+        const size = Math.min(BAKE_SIZE, maxT);
+        log(`maxTextureSize=${maxT}, using ${size}`);
+
+        const gltf = await new GLTFLoader().loadAsync(GLB);
+        const bakeRoot = gltf.scene;
+        bakeRoot.position.set(0, 0, 0);
+        bakeRoot.rotation.set(0, THREE.MathUtils.degToRad(2.922), 0);
+        bakeRoot.scale.set(7.603, 8.434, 3.704);
+        bakeRoot.traverse((o) => {
+          if (!o.isMesh) return;
+          o.castShadow = false;
+          o.receiveShadow = false;
+        });
+        bakeRoot.updateMatrixWorld(true);
+        let box = new THREE.Box3().setFromObject(bakeRoot);
+        bakeRoot.position.y = -box.min.y;
+        bakeRoot.updateMatrixWorld(true);
+        box = new THREE.Box3().setFromObject(bakeRoot);
+        const sizeV = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const worldW = Math.max(sizeV.x, sizeV.z, 0.05);
+        const worldH = Math.max(sizeV.y, 0.05);
+        bakeRoot.position.x -= center.x;
+        bakeRoot.position.y -= center.y;
+        bakeRoot.position.z -= center.z;
+        bakeRoot.updateMatrixWorld(true);
+        if (PAD > 1) {
+          bakeRoot.position.y -= worldH * (PAD - 1) * 0.5;
+          bakeRoot.updateMatrixWorld(true);
+        }
+
+        const halfW = worldW * PAD * 0.5;
+        const halfH = worldH * PAD * 0.5;
+        const bakeScene = new THREE.Scene();
+        bakeScene.add(bakeRoot);
+        bakeScene.add(new THREE.AmbientLight(0x2a1838, 0.38));
+        const key = new THREE.DirectionalLight(0xffd0e8, 1.45);
+        key.position.set(-4, 12.2, -22);
+        bakeScene.add(key);
+        const kick = new THREE.DirectionalLight(0x6a80a8, 0.35);
+        kick.position.set(6, 3, 8);
+        bakeScene.add(kick);
+        const rim = new THREE.DirectionalLight(0xffc0e0, 0.28);
+        rim.position.set(2, 8, 10);
+        bakeScene.add(rim);
+
+        const cam = new THREE.OrthographicCamera(
+          -halfW,
+          halfW,
+          halfH,
+          -halfH,
+          0.05,
+          Math.max(halfW, halfH) * 10,
+        );
+        cam.position.set(0, 0, Math.max(halfW, halfH) * 4);
+        cam.lookAt(0, 0, 0);
+
+        const aspect = worldW / worldH;
+        let cw = size;
+        let ch = size;
+        if (aspect >= 1) ch = Math.max(64, Math.round(size / aspect));
+        else cw = Math.max(64, Math.round(size * aspect));
+
+        const rt = new THREE.WebGLRenderTarget(cw, ch, {
+          format: THREE.RGBAFormat,
+          type: THREE.UnsignedByteType,
+          depthBuffer: true,
+          stencilBuffer: false,
+        });
+        rt.texture.colorSpace = THREE.SRGBColorSpace;
+
+        renderer.setRenderTarget(rt);
+        renderer.setClearColor(0x000000, 0);
+        renderer.clear();
+        renderer.render(bakeScene, cam);
+
+        const pixels = new Uint8Array(cw * ch * 4);
+        renderer.readRenderTargetPixels(rt, 0, 0, cw, ch, pixels);
+        renderer.setRenderTarget(null);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext("2d");
+        const img = ctx.createImageData(cw, ch);
+        for (let y = 0; y < ch; y++) {
+          const src = (ch - 1 - y) * cw * 4;
+          img.data.set(pixels.subarray(src, src + cw * 4), y * cw * 4);
+        }
+        ctx.putImageData(img, 0, 0);
+
+        const blob = await new Promise((r) => canvas.toBlob(r, "image/png"));
+        const buf = new Uint8Array(await blob.arrayBuffer());
+        let binary = "";
+        const step = 0x8000;
+        for (let i = 0; i < buf.length; i += step) {
+          binary += String.fromCharCode.apply(null, buf.subarray(i, i + step));
+        }
+
+        window.__BAKE_META__ = {
+          width: cw,
+          height: ch,
+          worldW,
+          worldH,
+          bytes: buf.length,
+          size,
+        };
+        window.__BAKE_PNG_B64__ = btoa(binary);
+        window.__BAKE_READY__ = true;
+        log(JSON.stringify(window.__BAKE_META__, null, 2));
+        log("READY");
+      } catch (e) {
+        window.__BAKE_ERROR__ = String(e?.stack || e);
+        log("ERROR " + window.__BAKE_ERROR__);
+      }
+    </script>
+  </body>
+</html>

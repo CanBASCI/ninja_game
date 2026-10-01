@@ -1,4 +1,9 @@
 import * as THREE from "three";
+import {
+  dynamicShadowCast,
+  applyDynamicCharEnv,
+  getAllowDynamicShadows,
+} from "../scene/shadowPolicy.js";
 
 /**
  * Tavana saplanan Konoha-stili kunai ucu + gerçek ip (texture).
@@ -38,12 +43,20 @@ export function createRopeHookFx(scene, { layer = 1 } = {}) {
     metalness: 0.05,
   });
 
+  applyDynamicCharEnv(
+    [ropeMat, steelMat, wrapMat],
+    scene.userData?.charEnvMap || null,
+    0.55,
+  );
+
   // İp — el ↔ kunai halkası
   const rope = new THREE.Mesh(
     new THREE.CylinderGeometry(0.016, 0.016, 1, 8),
     ropeMat,
   );
-  rope.castShadow = true;
+  rope.castShadow = getAllowDynamicShadows() && dynamicShadowCast.rope;
+  rope.userData.dynamicShadowCaster = true;
+  rope.userData.dynamicShadowKind = "rope";
   group.add(rope);
 
   // Konoha kunai (tavana saplanan uç yukarı bakar)
@@ -93,7 +106,9 @@ export function createRopeHookFx(scene, { layer = 1 } = {}) {
   group.traverse((o) => {
     o.layers.set(layer);
     if (o.isMesh) {
-      o.castShadow = true;
+      o.userData.dynamicShadowCaster = true;
+      o.userData.dynamicShadowKind = "rope";
+      o.castShadow = getAllowDynamicShadows() && dynamicShadowCast.rope;
       o.receiveShadow = true;
     }
   });
