@@ -128,10 +128,10 @@ export function buildScenePack3(root, opts = {}) {
     model.position.y -= box2.min.y;
   }
 
-  /** Root 2B — sadece Y, sınırlı dönüş (tam Sprite kadar dönmesin) */
+  /** Root 2B — sadece Y, çok hafif dönüş (karton kenarı; kameraya yapışmasın) */
   const yBillboards = [];
-  const Y_BILLBOARD_AMOUNT = 0.38;
-  const Y_BILLBOARD_MAX = 0.4;
+  const Y_BILLBOARD_AMOUNT = 0.08;
+  const Y_BILLBOARD_MAX = 0.08;
   const CAM_Z = 20;
 
   /**
@@ -208,10 +208,14 @@ export function buildScenePack3(root, opts = {}) {
     if (p.tint != null) mat.color.set(p.tint);
     if (p.fog === false) mat.fog = false;
 
-    // mid/far: sabit düzlem. root: sadece Y billboard (hafif — tam Sprite kadar dönmesin)
+    // mid/far + binalar: sabit. root foliage: sadece Y, çok hafif
     const layer = p.parentLayer || "root";
     const fixedFacing =
-      p.fixedFacing === true || layer === "mid" || layer === "far";
+      p.fixedFacing === true ||
+      layer === "mid" ||
+      layer === "far" ||
+      p.group === "buildings" ||
+      p.yBillboard === false;
     const yBillboard = !fixedFacing && p.yBillboard !== false;
 
     let w;
@@ -1199,6 +1203,7 @@ export function buildScenePack3(root, opts = {}) {
         group: "buildings",
         role: "decor",
         parentLayer: "root",
+        fixedFacing: true,
         x: -3.529,
         y: -0.419,
         z: -7.06,
