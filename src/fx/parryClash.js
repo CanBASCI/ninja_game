@@ -14,6 +14,7 @@ export function createParryClashFx(scene) {
     if (!worldPos) return;
     const origin = worldPos.clone();
     origin.z = 0.05;
+    if (origin.y < 0.02) origin.y = 0.02;
 
     // Merkez disk — temas alanı
     const coreMat = new THREE.MeshBasicMaterial({

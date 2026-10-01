@@ -13,6 +13,8 @@ export function createHitSparkFx(scene) {
     if (!worldPos) return;
     const origin = worldPos.clone();
     origin.z = 0;
+    // Zemin altı kıvılcım görünmesin
+    if (origin.y < 0.02) origin.y = 0.02;
 
     // Merkez flaş
     const flashMat = new THREE.MeshBasicMaterial({

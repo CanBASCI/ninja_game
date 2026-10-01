@@ -116,6 +116,13 @@ export function createSwordTrail(scene, { color = 0xffffff } = {}) {
     makeLayer(0.72, color),
   ];
   const widthScales = [0.85, 0.5, 0.18];
+  /** Zemin altı splash görünmesin */
+  const GROUND_Y = 0.02;
+
+  function clampGround(v) {
+    if (v.y < GROUND_Y) v.y = GROUND_Y;
+    return v;
+  }
 
   function setColor(hex) {
     for (const L of layers) {
@@ -148,15 +155,17 @@ export function createSwordTrail(scene, { color = 0xffffff } = {}) {
     for (let i = 0; i < RENDER_SEGS; i++) {
       const t = tips[i];
       const b = bases[i];
+      const ty = Math.max(t.y, GROUND_Y);
+      const by = Math.max(b.y, GROUND_Y);
       const mx = (t.x + b.x) * 0.5;
-      const my = (t.y + b.y) * 0.5;
+      const my = (ty + by) * 0.5;
       const mz = (t.z + b.z) * 0.5;
       const o = i * 6;
       positions[o] = mx + (t.x - mx) * wScale;
-      positions[o + 1] = my + (t.y - my) * wScale;
+      positions[o + 1] = my + (ty - my) * wScale;
       positions[o + 2] = mz + (t.z - mz) * wScale;
       positions[o + 3] = mx + (b.x - mx) * wScale;
-      positions[o + 4] = my + (b.y - my) * wScale;
+      positions[o + 4] = my + (by - my) * wScale;
       positions[o + 5] = mz + (b.z - mz) * wScale;
     }
     layer.mesh.geometry.attributes.position.needsUpdate = true;
@@ -167,6 +176,8 @@ export function createSwordTrail(scene, { color = 0xffffff } = {}) {
     if (tipMarker && baseMarker && active) {
       tipMarker.getWorldPosition(_tip);
       baseMarker.getWorldPosition(_base);
+      clampGround(_tip);
+      clampGround(_base);
       const last = tipHist[tipHist.length - 1];
       if (!last || last.distanceToSquared(_tip) > 1e-8) {
         tipHist.push(_tip.clone());

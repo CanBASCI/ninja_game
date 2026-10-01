@@ -206,7 +206,7 @@ export function createMainChar(world) {
   const COYOTE_MS = 110;
   let coyoteUntil = 0;
   /** Birbirini kesebilen one-shot hareketler (saldırı / zıpla / parkour / özel)
-   *  Kılıçsız punch/kick burada YOK — bitmeden diğeri başlamasın */
+   *  Unarmed ayrı: jump/parkour’u kesebilir ama unarmed↔unarmed kesişmez */
   const ACTION_CANCEL = new Set([
     ANIM.jump,
     ANIM.vault,
@@ -1083,10 +1083,16 @@ export function createMainChar(world) {
   function playOneShot(name, lockMs, { fade: fadeOpt, comboForward } = {}) {
     const now = performance.now();
     // Zıpla / parkour / saldırı / özel — birbirini kesebilir
+    // Unarmed: jump/parkour/kılıçlıyı keser; unarmed↔unarmed kesmez (bitmeden yenisi yok)
     // Slide kendini kesmesin (arka arkaya kayma yok)
+    const cancelable = (n) =>
+      ACTION_CANCEL.has(n) || UNARMED_ANIMS.has(n);
+    const bothUnarmed =
+      UNARMED_ANIMS.has(name) && UNARMED_ANIMS.has(forcedAnim);
     const canCancel =
-      ACTION_CANCEL.has(name) &&
-      ACTION_CANCEL.has(forcedAnim) &&
+      cancelable(name) &&
+      cancelable(forcedAnim) &&
+      !bothUnarmed &&
       !(name === ANIM.slide && forcedAnim === ANIM.slide);
     if (now < busyUntil && !canCancel) return false;
 
@@ -2165,7 +2171,9 @@ export function createMainChar(world) {
       if (!mustSheatheKatana()) setKatanaDrawn(!katanaDrawn);
     }
 
-    const canAttack = !isRunningInput();
+    // Koşarken yer saldırısı yok; havada Shift tutulsa da E/J/K/L serbest
+    const canAttack =
+      !isRunningInput() || !grounded || character.position.y > 0.04;
     // J/L/K: kılıçlı → reverse-combo; kılıçsız → tam anim (kesme yok)
     if (keys.has("KeyJ")) {
       if (canAttack) {
