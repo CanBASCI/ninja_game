@@ -961,7 +961,7 @@ export function buildScenePack3(root, opts = {}) {
     const model = src.clone(true);
     prepareEnvMesh(model);
     // Fener PointLight yıkamasın — unlit + karartılmış albedo
-    dimNightProp(model, 0.3);
+    dimNightProp(model, 0.16);
     model.position.set(13.053, 3.371, -3.185);
     model.rotation.set(
       THREE.MathUtils.degToRad(-51.66),
